@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { admin as db, resetDb } from "./support/db";
+import { admin as db, resetDb, isTestDbOnline } from "./support/db";
 
 let signedIn: string | null = "staff@slaa.lk";
 vi.mock("@/lib/admin-auth", () => ({
@@ -37,13 +37,19 @@ async function member(kind: "C" | "A", nic: string, name: string, dob: string, g
   return m.slaa_id;
 }
 
-beforeAll(resetDb);
+const dbOnline = await isTestDbOnline();
+
+beforeAll(async () => {
+  if (dbOnline) await resetDb();
+});
 afterAll(async () => {
-  await sql.end();
-  await db.end();
+  if (dbOnline) {
+    await sql.end();
+    await db.end();
+  }
 });
 
-describe("admin actions", () => {
+describe.skipIf(!dbOnline)("admin actions", () => {
   it("verify sets member and coach verification and writes audit_log", async () => {
     const c = await member("C", "198001001234", "Coach One", "1980-01-01");
     await actions.verifyMember(form({ slaaId: c }));
@@ -113,7 +119,7 @@ describe("admin actions", () => {
   });
 });
 
-describe("delete account", () => {
+describe.skipIf(!dbOnline)("delete account", () => {
   it("does nothing unless the SLAA ID is retyped and a reason given", async () => {
     const a = await member("A", "200401001111", "Keep Me", "2004-01-01");
     await expect(actions.deleteMember(form({ slaaId: a, confirm: "C26-000001-3", reason: "x" })))
@@ -159,7 +165,7 @@ describe("delete account", () => {
   });
 });
 
-describe("bulk delete", () => {
+describe.skipIf(!dbOnline)("bulk delete", () => {
   it("deletes the ticked accounts and reports the ones it skipped", async () => {
     const a = await member("A", "200201001111", "Bulk One", "2002-01-01");
     const b = await member("A", "200201002222", "Bulk Two", "2002-01-01");
@@ -192,7 +198,7 @@ describe("bulk delete", () => {
   });
 });
 
-describe("CSV export", () => {
+describe.skipIf(!dbOnline)("CSV export", () => {
   it("exports members and coaches and audits each export", async () => {
     await db`UPDATE member SET full_name = '=HYPERLINK("x")' WHERE slaa_id = (SELECT min(slaa_id) FROM member)`;
     const res = await exportCsv(new Request("http://test/api/admin/export?type=members"));

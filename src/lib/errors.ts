@@ -15,6 +15,11 @@ const UNIQUE: Record<string, AppError> = {
     message: "This SLAA licence number is already registered to another coach.",
     field: "licenseNo",
   },
+  coach_qualification_serial_uq: {
+    status: 409,
+    message: "This certificate number is already registered to another coach. Contact SLAA.",
+    field: "certificateSerial",
+  },
   athlete_coach_primary_uq: { status: 400, message: "Only one current coach can be primary.", field: "coaches" },
   athlete_coach_current_uq: { status: 400, message: "The same coach is listed twice as current.", field: "coaches" },
 };

@@ -2,13 +2,16 @@ import { afterAll, describe, expect, it } from "vitest";
 import { normalizeNic } from "@/lib/nic";
 import { DISTRICTS, EVENT_CODES } from "@/lib/reference";
 import { checkDigit } from "@/lib/slaa-id";
-import { admin } from "./support/db";
+import { admin, isTestDbOnline } from "./support/db";
 
 // The TypeScript mirrors must agree with the SQL that enforces the rules.
+const online = await isTestDbOnline();
 
-afterAll(() => admin.end());
+afterAll(async () => {
+  if (online) await admin.end();
+});
 
-describe("TypeScript matches SQL", () => {
+describe.skipIf(!online)("TypeScript matches SQL", () => {
   it("check digit agrees for many bodies", async () => {
     const bodies: string[] = [];
     for (let i = 0; i < 300; i++) {

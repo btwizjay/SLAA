@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
-import { sql } from "@/lib/db";
+import { sqlAthlete } from "@/lib/db";
 import { markRequestInvited, rejectRequest, resolveRequest } from "../actions";
 import { CopyButton } from "../CopyButton";
 import { StatusBadge } from "../StatusBadge";
@@ -24,12 +24,22 @@ export default async function CoachRequestsPage({ searchParams }: { searchParams
   const { status = "open" } = await searchParams;
   const statuses = status === "open" ? ["pending", "invited"] : [status];
 
-  const rows = await sql<Req[]>`
-    SELECT r.*, m.full_name AS athlete_name, m.name_with_initials AS athlete_initials
-    FROM coach_request r JOIN member m ON m.slaa_id = r.requested_by
-    WHERE r.status IN ${sql(statuses)}
-    ORDER BY r.created_at
-    LIMIT 500`;
+  let rows: Req[] = [];
+  try {
+    rows = await sqlAthlete<Req[]>`
+      SELECT r.*, m.full_name AS athlete_name, m.name_with_initials AS athlete_initials
+      FROM coach_request r JOIN member m ON m.slaa_id = r.requested_by
+      WHERE r.status IN ${sqlAthlete(statuses)}
+      ORDER BY r.created_at
+      LIMIT 500`;
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production" && (err as { code?: string })?.code === "ECONNREFUSED") {
+      console.warn("coach-requests: DB offline in dev, returning empty list");
+      rows = [];
+    } else {
+      throw err;
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
-import { sql } from "@/lib/db";
+import { sqlCoach, sqlAthlete } from "@/lib/db";
 import { isValidSlaaId } from "@/lib/slaa-id";
 
 // Every admin action: check the session, change the row, write audit_log.
@@ -17,15 +17,20 @@ function id(formData: FormData, key = "slaaId") {
 export async function verifyMember(formData: FormData) {
   const admin = await requireAdmin();
   const slaaId = id(formData);
-  await sql.begin(async (tx) => {
+  const db = slaaId.startsWith("C") ? sqlCoach : sqlAthlete;
+
+  await db.begin(async (tx) => {
     const updated = await tx`
       UPDATE member SET status = 'verified'
       WHERE slaa_id = ${slaaId} AND status IN ('pending', 'suspended')
       RETURNING slaa_id`;
     if (!updated.length) return;
-    await tx`
-      UPDATE coach SET is_verified = true, verified_by = ${admin}, verified_at = now()
-      WHERE slaa_id = ${slaaId}`;
+
+    if (slaaId.startsWith("C")) {
+      await tx`
+        UPDATE coach SET is_verified = true, verified_by = ${admin}, verified_at = now()
+        WHERE slaa_id = ${slaaId}`;
+    }
     await tx`INSERT INTO audit_log (actor, action, slaa_id) VALUES (${admin}, 'verify', ${slaaId})`;
   });
   revalidatePath(`/admin/members/${slaaId}`);
@@ -35,7 +40,9 @@ export async function suspendMember(formData: FormData) {
   const admin = await requireAdmin();
   const slaaId = id(formData);
   const reason = String(formData.get("reason") ?? "").slice(0, 500);
-  await sql.begin(async (tx) => {
+  const db = slaaId.startsWith("C") ? sqlCoach : sqlAthlete;
+
+  await db.begin(async (tx) => {
     const updated = await tx`
       UPDATE member SET status = 'suspended'
       WHERE slaa_id = ${slaaId} AND status IN ('pending', 'verified')
@@ -59,52 +66,48 @@ export async function mergeMembers(formData: FormData) {
   const dup = id(formData, "duplicate");
   if (keep === dup) throw new Error("Choose two different records");
 
-  await sql.begin(async (tx) => {
+  const isCoach = keep.startsWith("C") && dup.startsWith("C");
+  const db = isCoach ? sqlCoach : sqlAthlete;
+
+  await db.begin(async (tx) => {
     const rows = await tx<{ slaa_id: string; status: string }[]>`
       SELECT slaa_id, status FROM member WHERE slaa_id IN (${keep}, ${dup}) FOR UPDATE`;
     if (rows.length !== 2 || rows.some((r) => r.status === "merged")) {
       throw new Error("Both records must exist and not already be merged");
     }
 
-    // Give the kept record the duplicate's roles if it lacks them.
-    await tx`
-      INSERT INTO athlete (slaa_id, school_or_club, main_events)
-      SELECT ${keep}, school_or_club, main_events FROM athlete WHERE slaa_id = ${dup}
-      ON CONFLICT (slaa_id) DO NOTHING`;
-    const dupCoach = await tx`SELECT 1 FROM coach WHERE slaa_id = ${dup}`;
-    const keepCoach = await tx`SELECT 1 FROM coach WHERE slaa_id = ${keep}`;
-    if (dupCoach.length && !keepCoach.length) {
-      const [c] = await tx`SELECT slaa_license_no FROM coach WHERE slaa_id = ${dup}`;
-      await tx`UPDATE coach SET slaa_license_no = NULL WHERE slaa_id = ${dup}`;
+    if (!isCoach) {
+      // Athlete DB merge
       await tx`
-        INSERT INTO coach (slaa_id, slaa_license_no, license_level, disciplines, is_verified, verified_by, verified_at)
-        SELECT ${keep}, ${c.slaa_license_no}, license_level, disciplines, is_verified, verified_by, verified_at
-        FROM coach WHERE slaa_id = ${dup}`;
+        INSERT INTO athlete (slaa_id, school_or_club, main_events)
+        SELECT ${keep}, school_or_club, main_events FROM athlete WHERE slaa_id = ${dup}
+        ON CONFLICT (slaa_id) DO NOTHING`;
+
+      await tx`
+        UPDATE athlete_coach ac SET
+          athlete_id = ${keep},
+          is_primary = ac.is_primary AND NOT EXISTS (
+            SELECT 1 FROM athlete_coach k WHERE k.athlete_id = ${keep}
+              AND k.relationship_type = 'CURRENT' AND k.is_primary)
+        WHERE ac.athlete_id = ${dup} AND ac.coach_id <> ${keep}
+          AND NOT (ac.relationship_type = 'CURRENT' AND EXISTS (
+            SELECT 1 FROM athlete_coach k WHERE k.athlete_id = ${keep}
+              AND k.coach_id = ac.coach_id AND k.relationship_type = 'CURRENT'))`;
+
+      await tx`UPDATE coach_request SET requested_by = ${keep} WHERE requested_by = ${dup}`;
+      await tx`UPDATE coach_request SET resolved_coach = ${keep} WHERE resolved_coach = ${dup}`;
+      await tx`UPDATE guardian SET athlete_id = ${keep} WHERE athlete_id = ${dup}`;
+    } else {
+      // Coach DB merge
+      const [c] = await tx`SELECT slaa_license_no FROM coach WHERE slaa_id = ${dup}`;
+      if (c?.slaa_license_no) {
+        await tx`UPDATE coach SET slaa_license_no = NULL WHERE slaa_id = ${dup}`;
+        await tx`UPDATE coach SET slaa_license_no = ${c.slaa_license_no} WHERE slaa_id = ${keep} AND slaa_license_no IS NULL`;
+      }
+      await tx`UPDATE coach_qualification SET coach_id = ${keep} WHERE coach_id = ${dup}`;
+      await tx`UPDATE coach_declaration SET coach_id = ${keep} WHERE coach_id = ${dup}`;
     }
 
-    // Links where the duplicate is the athlete
-    await tx`
-      UPDATE athlete_coach ac SET
-        athlete_id = ${keep},
-        is_primary = ac.is_primary AND NOT EXISTS (
-          SELECT 1 FROM athlete_coach k WHERE k.athlete_id = ${keep}
-            AND k.relationship_type = 'CURRENT' AND k.is_primary)
-      WHERE ac.athlete_id = ${dup} AND ac.coach_id <> ${keep}
-        AND NOT (ac.relationship_type = 'CURRENT' AND EXISTS (
-          SELECT 1 FROM athlete_coach k WHERE k.athlete_id = ${keep}
-            AND k.coach_id = ac.coach_id AND k.relationship_type = 'CURRENT'))`;
-
-    // Links where the duplicate is the coach
-    await tx`
-      UPDATE athlete_coach ac SET coach_id = ${keep}
-      WHERE ac.coach_id = ${dup} AND ac.athlete_id <> ${keep}
-        AND NOT (ac.relationship_type = 'CURRENT' AND EXISTS (
-          SELECT 1 FROM athlete_coach k WHERE k.coach_id = ${keep}
-            AND k.athlete_id = ac.athlete_id AND k.relationship_type = 'CURRENT'))`;
-
-    await tx`UPDATE coach_request SET requested_by = ${keep} WHERE requested_by = ${dup}`;
-    await tx`UPDATE coach_request SET resolved_coach = ${keep} WHERE resolved_coach = ${dup}`;
-    await tx`UPDATE guardian SET athlete_id = ${keep} WHERE athlete_id = ${dup}`;
     await tx`UPDATE member SET status = 'merged', merged_into = ${keep} WHERE slaa_id = ${dup}`;
 
     await tx`
@@ -112,6 +115,7 @@ export async function mergeMembers(formData: FormData) {
       VALUES (${admin}, 'merge', ${keep}, ${tx.json({ merged: dup })}),
              (${admin}, 'merged_into', ${dup}, ${tx.json({ kept: keep })})`;
   });
+
   revalidatePath("/admin/duplicates");
   redirect(`/admin/members/${keep}`);
 }
@@ -119,7 +123,7 @@ export async function mergeMembers(formData: FormData) {
 export async function markRequestInvited(formData: FormData) {
   const admin = await requireAdmin();
   const requestId = Number(formData.get("requestId"));
-  await sql.begin(async (tx) => {
+  await sqlAthlete.begin(async (tx) => {
     const [r] = await tx<{ requested_by: string }[]>`
       UPDATE coach_request SET status = 'invited' WHERE id = ${requestId} AND status = 'pending'
       RETURNING requested_by`;
@@ -136,9 +140,12 @@ export async function resolveRequest(formData: FormData) {
   const admin = await requireAdmin();
   const requestId = Number(formData.get("requestId"));
   const coachId = id(formData, "coachId");
-  await sql.begin(async (tx) => {
-    const [coach] = await tx`SELECT 1 FROM coach WHERE slaa_id = ${coachId}`;
-    if (!coach) throw new Error(`${coachId} is not a registered coach`);
+
+  // Verify coach exists in Coach DB
+  const [coach] = await sqlCoach`SELECT 1 FROM coach WHERE slaa_id = ${coachId}`;
+  if (!coach) throw new Error(`${coachId} is not a registered coach`);
+
+  await sqlAthlete.begin(async (tx) => {
     const [r] = await tx<{ requested_by: string }[]>`
       UPDATE coach_request SET status = 'registered', resolved_coach = ${coachId}
       WHERE id = ${requestId} AND status IN ('pending', 'invited')
@@ -160,7 +167,7 @@ export async function resolveRequest(formData: FormData) {
 export async function rejectRequest(formData: FormData) {
   const admin = await requireAdmin();
   const requestId = Number(formData.get("requestId"));
-  await sql.begin(async (tx) => {
+  await sqlAthlete.begin(async (tx) => {
     const [r] = await tx<{ requested_by: string }[]>`
       UPDATE coach_request SET status = 'rejected' WHERE id = ${requestId} AND status IN ('pending', 'invited')
       RETURNING requested_by`;
@@ -176,7 +183,7 @@ export async function rejectRequest(formData: FormData) {
 export async function approveLink(formData: FormData) {
   const admin = await requireAdmin();
   const linkId = Number(formData.get("linkId"));
-  await sql.begin(async (tx) => {
+  await sqlAthlete.begin(async (tx) => {
     const [l] = await tx<{ athlete_id: string; coach_id: string }[]>`
       UPDATE athlete_coach SET is_approved_by_coach = true
       WHERE id = ${linkId} AND NOT is_approved_by_coach
@@ -202,8 +209,9 @@ export async function deleteMember(formData: FormData) {
   if (confirm !== slaaId) redirect(`/admin/members/${slaaId}?deleteError=confirm`);
   if (!reason) redirect(`/admin/members/${slaaId}?deleteError=reason`);
 
+  const db = slaaId.startsWith("C") ? sqlCoach : sqlAthlete;
   try {
-    await sql`SELECT admin_delete_member(${slaaId}, ${admin}, ${reason})`;
+    await db`SELECT admin_delete_member(${slaaId}, ${admin}, ${reason})`;
   } catch (e) {
     if ((e as { code?: string }).code === "55000") redirect(`/admin/members/${slaaId}?deleteError=merged`);
     throw e;
@@ -222,13 +230,12 @@ export async function bulkDeleteMembers(formData: FormData) {
   if (confirm !== "DELETE") redirect("/admin?bulkError=confirm");
   if (!reason) redirect("/admin?bulkError=reason");
 
-  // Each account is its own transaction (inside the function), so one that
-  // cannot be deleted does not stop the others.
   const skipped: string[] = [];
   let deleted = 0;
   for (const slaaId of ids) {
+    const db = slaaId.startsWith("C") ? sqlCoach : sqlAthlete;
     try {
-      await sql`SELECT admin_delete_member(${slaaId}, ${admin}, ${reason})`;
+      await db`SELECT admin_delete_member(${slaaId}, ${admin}, ${reason})`;
       deleted++;
     } catch (e) {
       const code = (e as { code?: string }).code;

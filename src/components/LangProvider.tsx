@@ -46,9 +46,9 @@ export function LanguageLink() {
     <Link
       href={`/language?next=${encodeURIComponent(pathname)}`}
       aria-label={t("changeLanguage")}
-      className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+      className="flex min-h-9 shrink-0 items-center gap-2 rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-xs sm:text-sm font-medium text-white transition hover:bg-white/20 backdrop-blur-sm"
     >
-      <Languages className="size-4" aria-hidden />
+      <Languages className="size-4 text-white" aria-hidden />
       <span lang={lang}>{LANG_LABELS[lang]}</span>
     </Link>
   );

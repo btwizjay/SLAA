@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import { sqlCoach, sqlAthlete } from "@/lib/db";
 import { hasValidPass, rateLimit } from "@/lib/guard";
 import { initialsName } from "@/lib/names";
 import { DISTRICTS } from "@/lib/reference";
 
-// Coach picker search. Returns name with initials, district and SLAA ID only:
+// Coach or athlete picker search. Returns name with initials, district and SLAA ID only:
 // never phone, email, NIC, date of birth or full name.
+// Routes to sqlAthlete when searching for athletes, and sqlCoach when searching for coaches.
 export async function GET(req: Request) {
   if (!hasValidPass(req)) {
     return NextResponse.json(
@@ -26,22 +27,46 @@ export async function GET(req: Request) {
   const limited = await rateLimit(req, "search");
   if (limited) return limited;
 
-  const like = "%" + q.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
-  const rows = await sql<{ slaa_id: string; name_with_initials: string | null; full_name: string; district: string }[]>`
-    SELECT m.slaa_id, m.name_with_initials, m.full_name, m.district
-    FROM coach c JOIN member m USING (slaa_id)
-    WHERE m.status IN ('pending', 'verified')
-      AND (m.name_with_initials ILIKE ${like} OR m.full_name ILIKE ${like}
-           OR m.slaa_id ILIKE ${q.toUpperCase() + "%"})
-      AND (${district} = '' OR m.district = ${district})
-    ORDER BY (m.district = ${district}) DESC, m.name_with_initials NULLS LAST, m.slaa_id
-    LIMIT 20`;
+  const role = url.searchParams.get("role") ?? "coach";
 
-  return NextResponse.json({
-    results: rows.map((r) => ({
-      slaaId: r.slaa_id,
-      name: r.name_with_initials || initialsName(r.full_name),
-      district: r.district,
-    })),
-  });
+  try {
+    const like = "%" + q.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
+    const db = role === "athlete" ? sqlAthlete : sqlCoach;
+
+    const rows =
+      role === "athlete"
+        ? await db<{ slaa_id: string; name_with_initials: string | null; full_name: string; district: string }[]>`
+            SELECT m.slaa_id, m.name_with_initials, m.full_name, m.district
+            FROM athlete a JOIN member m USING (slaa_id)
+            WHERE m.status IN ('pending', 'verified')
+              AND (m.name_with_initials ILIKE ${like} OR m.full_name ILIKE ${like}
+                   OR m.slaa_id ILIKE ${q.toUpperCase() + "%"})
+              AND (${district} = '' OR m.district = ${district})
+            ORDER BY (m.district = ${district}) DESC, m.name_with_initials NULLS LAST, m.slaa_id
+            LIMIT 20`
+        : await db<{ slaa_id: string; name_with_initials: string | null; full_name: string; district: string }[]>`
+            SELECT m.slaa_id, m.name_with_initials, m.full_name, m.district
+            FROM coach c JOIN member m USING (slaa_id)
+            WHERE m.status IN ('pending', 'verified')
+              AND (m.name_with_initials ILIKE ${like} OR m.full_name ILIKE ${like}
+                   OR m.slaa_id ILIKE ${q.toUpperCase() + "%"})
+              AND (${district} = '' OR m.district = ${district})
+            ORDER BY (m.district = ${district}) DESC, m.name_with_initials NULLS LAST, m.slaa_id
+            LIMIT 20`;
+
+    return NextResponse.json({
+      results: rows.map((r) => ({
+        slaaId: r.slaa_id,
+        name: r.name_with_initials || initialsName(r.full_name),
+        district: r.district,
+      })),
+    });
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production" && (e as { code?: string })?.code === "ECONNREFUSED") {
+      console.warn("coaches/search: DB unreachable in dev (ECONNREFUSED), returning empty results");
+      return NextResponse.json({ results: [] });
+    }
+    console.error("search failed", e);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
 }

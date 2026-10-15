@@ -114,6 +114,7 @@ export function AthleteRegistration() {
         slaaId: result.slaaId,
         name: form.nameWithInitials,
         coachLinks: form.coaches.length,
+        registrationType: "athlete",
       });
       clearCheckedIdentity();
       router.push("/register/done");
@@ -130,14 +131,15 @@ export function AthleteRegistration() {
   const g = errors.guardian as FieldErrors<NonNullable<AthleteForm["guardian"]>> & { message?: string } | undefined;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6" noValidate>
-      <div>
-        <p className="text-sm font-medium text-primary">{t("stepForm")}</p>
-        <h1 className="mt-1 text-2xl font-bold">{t("formTitle")}</h1>
-      </div>
+    <div className="mx-auto w-full max-w-3xl sm:max-w-4xl px-4 py-6 sm:py-10">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6" noValidate>
+        <div>
+          <p className="text-sm font-semibold text-blue-600">{t("stepForm")}</p>
+          <h1 className="mt-1 text-2xl font-extrabold text-slate-900 tracking-tight">{t("formTitle")}</h1>
+        </div>
 
-      <div className="flex flex-col gap-6 rounded-xl border bg-background p-4 sm:p-6">
-        <IdentitySummary identity={checked.identity} />
+        <div className="flex flex-col gap-6 rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-7 shadow-sm">
+          <IdentitySummary identity={checked.identity} />
 
         <Section title={t("aboutYou")}>
           <PersonFields register={register} errors={errors} lockedFromNic={lockedFromNic}
@@ -195,11 +197,16 @@ export function AthleteRegistration() {
         </Section>
       </div>
 
-      <FormError message={formError} />
-      <Turnstile ref={turnstile} />
-      <Button type="submit" disabled={isSubmitting} className="h-auto min-h-12 py-2 text-base whitespace-normal">
-        {isSubmitting ? t("submitting") : t("submit")}
-      </Button>
-    </form>
+        <FormError message={formError} />
+        <Turnstile ref={turnstile} />
+        <Button
+          type="submit"
+          disabled={isSubmitting}
+          className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-auto min-h-12 py-3 text-base shadow-md hover:scale-[1.01] active:scale-[0.99] transition whitespace-normal"
+        >
+          {isSubmitting ? t("submitting") : t("submit")}
+        </Button>
+      </form>
+    </div>
   );
 }

@@ -1,27 +1,68 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
-import { sql } from "@/lib/db";
+import { sqlCoach, sqlAthlete } from "@/lib/db";
 import { mergeMembers } from "../actions";
 import { StatusBadge } from "../StatusBadge";
 
 export const metadata = { title: "Possible duplicates · SLAA admin" };
 
-type Row = { slaa_id: string; full_name: string; status: string; nic: string | null; postal_id: string | null; birth_cert_no: string | null; created_at: Date };
+type Row = {
+  slaa_id: string;
+  full_name: string;
+  status: string;
+  nic: string | null;
+  postal_id: string | null;
+  created_at: Date;
+};
+
+type Group = {
+  key: string;
+  date_of_birth: string;
+  district: string;
+  members: Row[];
+};
 
 export default async function DuplicatesPage() {
   await requireAdmin();
-  const groups = await sql<{ key: string; date_of_birth: string; district: string; members: Row[] }[]>`
-    SELECT lower(full_name) AS key, date_of_birth::text, district,
-           json_agg(json_build_object(
-             'slaa_id', slaa_id, 'full_name', full_name, 'status', status, 'nic', nic,
-             'postal_id', postal_id, 'birth_cert_no', birth_cert_no, 'created_at', created_at)
-             ORDER BY created_at) AS members
-    FROM member
-    WHERE status <> 'merged'
-    GROUP BY lower(full_name), date_of_birth, district
-    HAVING count(*) > 1
-    ORDER BY max(created_at) DESC
-    LIMIT 200`;
+  let groups: Group[] = [];
+
+  try {
+    const queryDuplicates = async (db: typeof sqlCoach) => {
+      try {
+        return await db<Group[]>`
+          SELECT lower(full_name) AS key, date_of_birth::text, district,
+                 json_agg(json_build_object(
+                   'slaa_id', slaa_id, 'full_name', full_name, 'status', status, 'nic', nic,
+                   'postal_id', postal_id, 'created_at', created_at)
+                   ORDER BY created_at) AS members
+          FROM member
+          WHERE status <> 'merged'
+          GROUP BY lower(full_name), date_of_birth, district
+          HAVING count(*) > 1
+          ORDER BY max(created_at) DESC
+          LIMIT 100`;
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production" && (err as { code?: string })?.code === "ECONNREFUSED") {
+          return [];
+        }
+        throw err;
+      }
+    };
+
+    const [coachGroups, athleteGroups] = await Promise.all([
+      queryDuplicates(sqlCoach),
+      queryDuplicates(sqlAthlete),
+    ]);
+
+    groups = [...coachGroups, ...athleteGroups];
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production" && (err as { code?: string })?.code === "ECONNREFUSED") {
+      console.warn("duplicates: DB offline in dev, returning empty list");
+      groups = [];
+    } else {
+      throw err;
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -44,23 +85,27 @@ export default async function DuplicatesPage() {
                     <Link className="text-primary hover:underline" href={`/admin/members/${m.slaa_id}`}>{m.slaa_id}</Link>
                   </td>
                   <td className="py-1.5 pr-3">{m.full_name}</td>
-                  <td className="py-1.5 pr-3 font-mono text-xs">{m.nic ?? m.postal_id ?? m.birth_cert_no}</td>
-                  <td className="py-1.5"><StatusBadge status={m.status} /></td>
+                  <td className="py-1.5 pr-3 text-muted-foreground font-mono text-xs">{m.nic ?? m.postal_id ?? "—"}</td>
+                  <td className="py-1.5 pr-3"><StatusBadge status={m.status} /></td>
+                  <td className="py-1.5 text-xs text-muted-foreground">{new Date(m.created_at).toLocaleDateString("en-GB")}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <form action={mergeMembers} className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            Keep
-            <select name="keep" className="h-9 rounded-md border px-2 font-mono">
-              {g.members.map((m) => <option key={m.slaa_id}>{m.slaa_id}</option>)}
+          <form action={mergeMembers} className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-sm">
+            <span className="text-muted-foreground">Keep:</span>
+            <select name="keep" className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs">
+              {g.members.map((m) => (
+                <option key={m.slaa_id} value={m.slaa_id}>{m.slaa_id} ({m.full_name})</option>
+              ))}
             </select>
-            and merge
-            <select name="duplicate" defaultValue={g.members[1].slaa_id} className="h-9 rounded-md border px-2 font-mono">
-              {g.members.map((m) => <option key={m.slaa_id}>{m.slaa_id}</option>)}
+            <span className="text-muted-foreground">Merge into it:</span>
+            <select name="duplicate" className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs">
+              {g.members.map((m) => (
+                <option key={m.slaa_id} value={m.slaa_id}>{m.slaa_id} ({m.full_name})</option>
+              ))}
             </select>
-            into it
-            <button className="h-9 rounded-md bg-primary px-4 text-primary-foreground">Merge</button>
+            <button className="h-8 rounded-md bg-primary px-3 text-xs text-primary-foreground">Merge records</button>
           </form>
         </section>
       ))}

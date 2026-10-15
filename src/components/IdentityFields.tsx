@@ -26,40 +26,46 @@ export function IdentityFields({
   value,
   onChange,
   errors,
+  allowedTypes = ["nic", "postal"],
 }: {
   value: IdentityValues;
   onChange: (v: IdentityValues) => void;
   errors: Record<string, string>;
+  allowedTypes?: IdentityType[];
 }) {
   const { t, tErr, lang } = useT();
-  const types: IdentityType[] = ["nic", "postal"];
+  const types = allowedTypes;
+  const currentType = types.includes(value.type) ? value.type : types[0];
   const set = (patch: Partial<IdentityValues>) => onChange({ ...value, ...patch });
   const nic = value.nic.trim() ? parseNic(value.nic) : null;
 
   return (
     <div className="flex flex-col gap-5">
-      <fieldset>
-        <legend className="mb-2 text-sm font-medium">{t("whichId")}</legend>
-        <div className="grid grid-cols-2 gap-2" role="radiogroup">
-          {types.map((type) => (
-            <button
-              key={type}
-              type="button"
-              role="radio"
-              aria-checked={value.type === type}
-              onClick={() => set({ type })}
-              className={cn(
-                "min-h-11 rounded-lg border px-3 text-sm font-medium transition-colors",
-                value.type === type ? "border-primary bg-primary/10 text-primary" : "bg-background hover:bg-muted",
-              )}
-            >
-              {t(TYPE_LABELS[type])}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      {types.length > 1 && (
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium">{t("whichId")}</legend>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            {types.map((type) => (
+              <button
+                key={type}
+                type="button"
+                role="radio"
+                suppressHydrationWarning
+                aria-checked={currentType === type}
+                onClick={() => set({ type })}
+                className={cn(
+                  "min-h-11 rounded-lg border px-3 text-sm font-medium transition-colors",
+                  currentType === type ? "border-primary bg-primary/10 text-primary" : "bg-background hover:bg-muted",
+                )}
+              >
+                {t(TYPE_LABELS[type])}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
 
-      {value.type === "nic" && (
+      {currentType === "nic" && (
         <Field label={t("nicNumber")} htmlFor="nic" error={errors.nic} hint={t("nicHint")}>
           <Input
             id="nic"
@@ -86,7 +92,7 @@ export function IdentityFields({
         </Field>
       )}
 
-      {value.type === "postal" && (
+      {currentType === "postal" && (
         <Field label={t("postalNumber")} htmlFor="postalId" error={errors.postalId}>
           <Input
             id="postalId"

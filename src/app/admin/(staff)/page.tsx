@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
-import { sql } from "@/lib/db";
+import { sqlCoach, sqlAthlete } from "@/lib/db";
 import { normalizeNic } from "@/lib/nic";
 import { DISTRICTS } from "@/lib/reference";
 import { bulkDeleteMembers } from "./actions";
@@ -11,7 +11,29 @@ export const metadata = { title: "Members · SLAA admin" };
 
 const PAGE = 50;
 
-type Search = { deleted?: string; bulkDeleted?: string; skipped?: string; bulkError?: string; type?: string; district?: string; status?: string; from?: string; to?: string; q?: string; page?: string };
+type Search = {
+  deleted?: string;
+  bulkDeleted?: string;
+  skipped?: string;
+  bulkError?: string;
+  type?: string;
+  district?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+  page?: string;
+};
+
+type MemberRow = {
+  slaa_id: string;
+  full_name: string;
+  district: string;
+  status: string;
+  is_coach: boolean;
+  is_athlete: boolean;
+  created_at: Date;
+};
 
 const control = "h-9 rounded-md border border-input bg-background px-2 text-sm";
 
@@ -23,48 +45,128 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
   const nic = q ? normalizeNic(q) : null;
   const isDate = (v?: string) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
-  const where = sql`
-    WHERE TRUE
-    ${s.type === "coach" ? sql`AND c.slaa_id IS NOT NULL` : sql``}
-    ${s.type === "athlete" ? sql`AND a.slaa_id IS NOT NULL` : sql``}
-    ${s.district ? sql`AND m.district = ${s.district}` : sql``}
-    ${s.status ? sql`AND m.status = ${s.status}` : sql``}
-    ${isDate(s.from) ? sql`AND m.created_at >= ${s.from!}::date` : sql``}
-    ${isDate(s.to) ? sql`AND m.created_at < ${s.to!}::date + 1` : sql``}
-    ${
-      nic
-        ? sql`AND m.nic = ${nic}`
-        : q
-          ? sql`AND (m.slaa_id ILIKE ${q + "%"} OR m.full_name ILIKE ${"%" + q + "%"}
-                     OR m.name_with_initials ILIKE ${"%" + q + "%"} OR m.postal_id = ${q.toUpperCase()}
-                     OR m.birth_cert_no = ${q.toUpperCase()})`
-          : sql``
-    }`;
+  let rows: MemberRow[] = [];
+  let total = 0;
+  let dbOffline = false;
 
-  const [rows, [{ total }]] = await Promise.all([
-    sql<{
-      slaa_id: string; full_name: string; district: string; status: string;
-      is_coach: boolean; is_athlete: boolean; created_at: Date;
-    }[]>`
-      SELECT m.slaa_id, m.full_name, m.district, m.status, m.created_at,
-             c.slaa_id IS NOT NULL AS is_coach, a.slaa_id IS NOT NULL AS is_athlete
-      FROM member m LEFT JOIN coach c USING (slaa_id) LEFT JOIN athlete a USING (slaa_id)
-      ${where}
-      ORDER BY m.created_at DESC
-      LIMIT ${PAGE} OFFSET ${(page - 1) * PAGE}`,
-    sql<{ total: number }[]>`
-      SELECT count(*)::int AS total
-      FROM member m LEFT JOIN coach c USING (slaa_id) LEFT JOIN athlete a USING (slaa_id)
-      ${where}`,
-  ]);
+  try {
+    const buildWhere = (db: typeof sqlCoach) => db`
+      WHERE TRUE
+      ${s.district ? db`AND m.district = ${s.district}` : db``}
+      ${s.status ? db`AND m.status = ${s.status}` : db``}
+      ${isDate(s.from) ? db`AND m.created_at >= ${s.from!}::date` : db``}
+      ${isDate(s.to) ? db`AND m.created_at < ${s.to!}::date + 1` : db``}
+      ${
+        nic
+          ? db`AND m.nic = ${nic}`
+          : q
+            ? db`AND (m.slaa_id ILIKE ${q + "%"} OR m.full_name ILIKE ${"%" + q + "%"}
+                       OR m.name_with_initials ILIKE ${"%" + q + "%"} OR m.postal_id = ${q.toUpperCase()})`
+            : db``
+      }`;
+
+    const queryCoaches = async () => {
+      try {
+        const where = buildWhere(sqlCoach);
+        const [cRows, countResult] = await Promise.all([
+          sqlCoach<MemberRow[]>`
+            SELECT m.slaa_id, m.full_name, m.district, m.status, m.created_at,
+                   true AS is_coach, false AS is_athlete
+            FROM member m JOIN coach c USING (slaa_id)
+            ${where}
+            ORDER BY m.created_at DESC
+            LIMIT ${PAGE} OFFSET ${(page - 1) * PAGE}`,
+          sqlCoach<{ count: number }[]>`
+            SELECT count(*)::int AS count
+            FROM member m JOIN coach c USING (slaa_id)
+            ${where}`,
+        ]);
+        return { rows: cRows, count: countResult[0]?.count ?? 0 };
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production" && (err as { code?: string })?.code === "ECONNREFUSED") {
+          dbOffline = true;
+          return { rows: [], count: 0 };
+        }
+        throw err;
+      }
+    };
+
+    const queryAthletes = async () => {
+      try {
+        const where = buildWhere(sqlAthlete);
+        const [aRows, countResult] = await Promise.all([
+          sqlAthlete<MemberRow[]>`
+            SELECT m.slaa_id, m.full_name, m.district, m.status, m.created_at,
+                   false AS is_coach, true AS is_athlete
+            FROM member m JOIN athlete a USING (slaa_id)
+            ${where}
+            ORDER BY m.created_at DESC
+            LIMIT ${PAGE} OFFSET ${(page - 1) * PAGE}`,
+          sqlAthlete<{ count: number }[]>`
+            SELECT count(*)::int AS count
+            FROM member m JOIN athlete a USING (slaa_id)
+            ${where}`,
+        ]);
+        return { rows: aRows, count: countResult[0]?.count ?? 0 };
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production" && (err as { code?: string })?.code === "ECONNREFUSED") {
+          dbOffline = true;
+          return { rows: [], count: 0 };
+        }
+        throw err;
+      }
+    };
+
+    if (s.type === "coach") {
+      const res = await queryCoaches();
+      rows = res.rows;
+      total = res.count;
+    } else if (s.type === "athlete") {
+      const res = await queryAthletes();
+      rows = res.rows;
+      total = res.count;
+    } else {
+      const [coachRes, athleteRes] = await Promise.all([queryCoaches(), queryAthletes()]);
+      total = coachRes.count + athleteRes.count;
+      rows = [...coachRes.rows, ...athleteRes.rows]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, PAGE);
+    }
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production" && (err as { code?: string })?.code === "ECONNREFUSED") {
+      dbOffline = true;
+      rows = [];
+      total = 0;
+    } else {
+      console.error("Admin MembersPage query error:", err);
+      throw err;
+    }
+  }
 
   const qs = (patch: Partial<Search>) => {
-    const p = new URLSearchParams(Object.entries({ ...s, deleted: undefined, bulkDeleted: undefined, skipped: undefined, bulkError: undefined, ...patch }).filter(([, v]) => v) as [string, string][]);
+    const p = new URLSearchParams(
+      Object.entries({
+        ...s,
+        deleted: undefined,
+        bulkDeleted: undefined,
+        skipped: undefined,
+        bulkError: undefined,
+        ...patch,
+      }).filter(([, v]) => v) as [string, string][],
+    );
     return `?${p}`;
   };
 
   return (
     <div className="flex flex-col gap-4">
+      {dbOffline && (
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="font-semibold">⚠️ Database Offline in Development</p>
+          <p className="mt-0.5 text-xs text-amber-700">
+            PostgreSQL is unreachable in local development. Connect a database to view live member records.
+          </p>
+        </div>
+      )}
       {s.deleted && (
         <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
           Account <span className="font-mono">{s.deleted}</span> and its personal details were deleted.
@@ -146,7 +248,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                 <td className="px-3 py-2">{[r.is_coach && "Coach", r.is_athlete && "Athlete"].filter(Boolean).join(", ")}</td>
                 <td className="px-3 py-2">{r.district}</td>
                 <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.created_at.toLocaleDateString("en-GB")}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{r.created_at ? new Date(r.created_at).toLocaleDateString("en-GB") : ""}</td>
               </tr>
             ))}
             {!rows.length && (

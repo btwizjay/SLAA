@@ -27,27 +27,43 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
+import Image from "next/image";
+
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const lang = await getLang();
   const fonts = [geistSans, geistMono, notoSinhala, notoTamil].map((f) => f.variable).join(" ");
 
   return (
-    <html lang={lang}>
-      <body className={`${fonts} min-h-dvh bg-muted/40 font-sans antialiased`}>
+    <html lang={lang} suppressHydrationWarning>
+      <body className={`${fonts} min-h-dvh flex flex-col bg-[#f8fafc] font-sans antialiased text-slate-900`} suppressHydrationWarning>
         <LangProvider lang={lang}>
-          <header className="no-print border-b bg-background">
-            <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-4">
-              <Link href="/" className="flex min-w-0 items-center gap-2 font-semibold">
-                <span className="grid h-8 shrink-0 place-items-center rounded-md bg-primary px-2 text-xs font-bold tracking-wide text-primary-foreground">
-                  SLAA
-                </span>
-                <span className="hidden truncate sm:inline">{t(lang, "siteTitle")}</span>
+          <header className="no-print bg-[#0028e8] text-white shadow-md">
+            <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+              <Link href="/" className="flex min-w-0 items-center gap-3 transition opacity-95 hover:opacity-100">
+                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-blue-900/30 p-0.5">
+                  <Image
+                    src="/slaa-logo.png"
+                    alt="Sri Lanka Athletics"
+                    width={40}
+                    height={40}
+                    priority
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-base font-bold leading-tight tracking-tight text-white">
+                    {t(lang, "siteTitle")}
+                  </span>
+                  <span className="text-xs font-normal leading-tight text-blue-100">
+                    Sri Lanka Athletics
+                  </span>
+                </div>
               </Link>
               <LanguageLink />
             </div>
           </header>
-          <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-10">{children}</main>
-          <footer className="no-print mx-auto max-w-3xl px-4 pb-8 text-xs text-muted-foreground">
+          <main className="flex-1 w-full">{children}</main>
+          <footer className="no-print mx-auto max-w-5xl px-4 py-8 text-center text-xs text-muted-foreground">
             {t(lang, "footer")}
           </footer>
         </LangProvider>
@@ -55,3 +71,4 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     </html>
   );
 }
+

@@ -39,6 +39,8 @@ function loadScript() {
   return scriptPromise;
 }
 
+const TEST_SITEKEY = "1x00000000000000000000AA";
+
 /** Cloudflare Turnstile widget. Tokens are single use: call reset() after each submit. */
 export const Turnstile = forwardRef<TurnstileHandle, { onToken?: (token: string) => void }>(
   function Turnstile({ onToken }, ref) {
@@ -47,6 +49,8 @@ export const Turnstile = forwardRef<TurnstileHandle, { onToken?: (token: string)
     const token = useRef("");
     const waiters = useRef<((t: string) => void)[]>([]);
     const onTokenRef = useRef<(t: string) => void>(() => {});
+    const sitekey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || TEST_SITEKEY;
+
     onTokenRef.current = (t: string) => {
       token.current = t;
       if (t) {
@@ -61,10 +65,18 @@ export const Turnstile = forwardRef<TurnstileHandle, { onToken?: (token: string)
         onTokenRef.current("");
         if (widgetId.current && window.turnstile) window.turnstile.reset(widgetId.current);
       },
-      getToken(timeoutMs = 15000) {
+      getToken(timeoutMs = 10000) {
         if (token.current) return Promise.resolve(token.current);
         return new Promise<string>((resolve) => {
-          const timer = setTimeout(() => resolve(""), timeoutMs);
+          const timer = setTimeout(() => {
+            // In dev mode or when using Cloudflare's always-pass test key,
+            // fallback to test token if Cloudflare is unreachable
+            if (process.env.NODE_ENV !== "production" || sitekey === TEST_SITEKEY) {
+              resolve(TEST_SITEKEY);
+            } else {
+              resolve("");
+            }
+          }, timeoutMs);
           waiters.current.push((t) => {
             clearTimeout(timer);
             resolve(t);
@@ -79,20 +91,32 @@ export const Turnstile = forwardRef<TurnstileHandle, { onToken?: (token: string)
         .then(() => {
           if (cancelled || !el.current || !window.turnstile) return;
           widgetId.current = window.turnstile.render(el.current, {
-            sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+            sitekey,
             callback: (t: string) => onTokenRef.current(t),
             "expired-callback": () => onTokenRef.current(""),
-            "error-callback": () => onTokenRef.current(""),
+            "error-callback": () => {
+              if (process.env.NODE_ENV !== "production" || sitekey === TEST_SITEKEY) {
+                onTokenRef.current(TEST_SITEKEY);
+              } else {
+                onTokenRef.current("");
+              }
+            },
             appearance: "interaction-only",
           });
         })
-        .catch(() => onTokenRef.current(""));
+        .catch(() => {
+          if (process.env.NODE_ENV !== "production" || sitekey === TEST_SITEKEY) {
+            onTokenRef.current(TEST_SITEKEY);
+          } else {
+            onTokenRef.current("");
+          }
+        });
       return () => {
         cancelled = true;
         if (widgetId.current && window.turnstile) window.turnstile.remove(widgetId.current);
         widgetId.current = null;
       };
-    }, []);
+    }, [sitekey]);
 
     return <div ref={el} className="min-h-0" />;
   },

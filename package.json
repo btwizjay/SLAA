@@ -8,8 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:coach": "tsx scripts/test_coach_registration.ts",
     "test:e2e": "playwright test",
     "db:apply": "scripts/db-apply.sh",
+    "db:setup:coach": "tsx scripts/apply_coach_db.ts",
+    "db:clean:test": "tsx scripts/clean_test_data.ts",
+    "seed:test": "tsx scripts/seed_test.ts",
     "import:sheet": "tsx scripts/import_google_sheet.ts",
     "qr": "tsx scripts/make_qr.ts"
   },

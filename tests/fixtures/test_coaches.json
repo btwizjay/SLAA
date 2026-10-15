@@ -1,0 +1,180 @@
+{
+  "caseA": {
+    "name": "Case A: Fresh Valid Registration (Happy Path)",
+    "identity": {
+      "type": "nic",
+      "nic": "199214501234"
+    },
+    "form": {
+      "fullName": "Nuwan Chamara Bandara",
+      "nameWithInitials": "N. C. Bandara",
+      "dateOfBirth": "1992-05-24",
+      "gender": "M",
+      "district": "Colombo",
+      "phone": "0712345678",
+      "email": "nuwan.bandara@example.com",
+      "licenseNo": "SLAA-C-2023-88",
+      "disciplines": ["100m", "200m", "400m"],
+      "qualifications": [
+        {
+          "level": "CECS_L2_EVENT",
+          "eventGroup": "Sprints",
+          "issuingBody": "World Athletics",
+          "certificateSerial": "WA-2023-8891",
+          "yearAwarded": 2023,
+          "_uploadedPath": "provisional/sample-cert.pdf"
+        }
+      ],
+      "athletes": [
+        {
+          "athleteId": "A26-000101-1",
+          "relationship": "CURRENT",
+          "startYear": 2023,
+          "endYear": "",
+          "isPrimary": true
+        }
+      ],
+      "declarations": [
+        { "code": "CERT_LEVEL", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "DOC_AUTHENTIC", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_CONVICTIONS", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "POLICE_CLEARANCE", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "SAFEGUARDING_CODE", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_DOPING_SANCTION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "CLEAN_SPORT", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_MANIPULATION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "ATHLETE_ROSTER", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "TRANSFER_RULES", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "TRUE_INFORMATION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "DATA_CONSENT", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "VERIFY_CONSENT", "version": 1, "answer": "confirm", "disclosureDetails": "" }
+      ],
+      "signature": "Nuwan Chamara Bandara",
+      "consent": true
+    },
+    "turnstileToken": "1x00000000000000000000AA",
+    "expected": {
+      "checkStatus": 200,
+      "exists": false,
+      "submitStatus": 201,
+      "reviewStatus": "not_needed"
+    }
+  },
+  "caseB": {
+    "name": "Case B: Disclosure Path (Safeguarding Flag)",
+    "identity": {
+      "type": "nic",
+      "nic": "198822003456"
+    },
+    "form": {
+      "fullName": "Dinesh Priyantha Rathnayake",
+      "nameWithInitials": "D. P. Rathnayake",
+      "dateOfBirth": "1988-08-07",
+      "gender": "M",
+      "district": "Kandy",
+      "phone": "0777654321",
+      "email": "dinesh.rathnayake@example.com",
+      "licenseNo": "SLAA-C-2019-12",
+      "disciplines": ["JT", "SP"],
+      "qualifications": [
+        {
+          "level": "CECS_L3_ELITE",
+          "eventGroup": "Throws",
+          "issuingBody": "World Athletics",
+          "certificateSerial": "WA-CECS-2019-771",
+          "yearAwarded": 2019,
+          "_uploadedPath": "provisional/dinesh-l3.pdf"
+        }
+      ],
+      "athletes": [],
+      "declarations": [
+        { "code": "CERT_LEVEL", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "DOC_AUTHENTIC", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_CONVICTIONS", "version": 1, "answer": "disclose", "disclosureDetails": "Pending traffic dispute inquiry from 2024" },
+        { "code": "POLICE_CLEARANCE", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "SAFEGUARDING_CODE", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_DOPING_SANCTION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "CLEAN_SPORT", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_MANIPULATION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "ATHLETE_ROSTER", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "TRANSFER_RULES", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "TRUE_INFORMATION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "DATA_CONSENT", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "VERIFY_CONSENT", "version": 1, "answer": "confirm", "disclosureDetails": "" }
+      ],
+      "signature": "Dinesh Priyantha Rathnayake",
+      "consent": true
+    },
+    "turnstileToken": "1x00000000000000000000AA",
+    "expected": {
+      "checkStatus": 200,
+      "exists": false,
+      "submitStatus": 201,
+      "reviewStatus": "pending"
+    }
+  },
+  "caseC": {
+    "name": "Case C: Duplicate NIC Test",
+    "identity": {
+      "type": "nic",
+      "nic": "853202937V"
+    },
+    "turnstileToken": "1x00000000000000000000AA",
+    "expected": {
+      "checkStatus": 200,
+      "exists": true,
+      "slaaIdPrefix": "C",
+      "maskedName": "K. P"
+    }
+  },
+  "caseD": {
+    "name": "Case D: Mismatched Signature / Incomplete Declarations",
+    "identity": {
+      "type": "nic",
+      "nic": "199411004321"
+    },
+    "form": {
+      "fullName": "Kasun Kalhara Jayasuriya",
+      "nameWithInitials": "K. K. Jayasuriya",
+      "dateOfBirth": "1994-04-20",
+      "gender": "M",
+      "district": "Kurunegala",
+      "phone": "0789012345",
+      "email": "kasun.j@example.com",
+      "licenseNo": "",
+      "disciplines": ["LJ"],
+      "qualifications": [
+        {
+          "level": "CECS_L1_YOUTH",
+          "eventGroup": "Jumps",
+          "issuingBody": "SLAA",
+          "certificateSerial": "SLAA-2022-441",
+          "yearAwarded": 2022
+        }
+      ],
+      "athletes": [],
+      "declarations": [
+        { "code": "CERT_LEVEL", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "DOC_AUTHENTIC", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_CONVICTIONS", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "POLICE_CLEARANCE", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "SAFEGUARDING_CODE", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_DOPING_SANCTION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "CLEAN_SPORT", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "NO_MANIPULATION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "ATHLETE_ROSTER", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "TRANSFER_RULES", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "TRUE_INFORMATION", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "DATA_CONSENT", "version": 1, "answer": "confirm", "disclosureDetails": "" },
+        { "code": "VERIFY_CONSENT", "version": 1, "answer": "confirm", "disclosureDetails": "" }
+      ],
+      "signature": "Totally Different Name",
+      "consent": true
+    },
+    "turnstileToken": "1x00000000000000000000AA",
+    "expected": {
+      "submitStatus": 400,
+      "errorMessage": "Digital signature does not match your full name."
+    }
+  }
+}

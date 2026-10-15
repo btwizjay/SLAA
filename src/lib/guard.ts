@@ -33,13 +33,21 @@ export const LIMITS = {
 /** Returns a 429 response when over the limit, otherwise null. */
 export async function rateLimit(req: Request, bucket: keyof typeof LIMITS): Promise<NextResponse | null> {
   const key = `${bucket}:${hashIp(clientIp(req))}`;
-  const [row] = await sql<{ ok: boolean }[]>`
-    SELECT rate_limit_hit(${key}, ${LIMITS[bucket]}, interval '1 minute') AS ok`;
-  if (row.ok) return null;
-  return NextResponse.json(
-    { error: "Too many requests. Please wait a minute and try again." },
-    { status: 429, headers: { "Retry-After": "60" } },
-  );
+  try {
+    const [row] = await sql<{ ok: boolean }[]>`
+      SELECT rate_limit_hit(${key}, ${LIMITS[bucket]}, interval '1 minute') AS ok`;
+    if (row?.ok) return null;
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a minute and try again." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    );
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("rateLimit bypassed (DB query error in dev):", (e as Error).message);
+      return null;
+    }
+    throw e;
+  }
 }
 
 export async function requireTurnstile(req: Request, token: string): Promise<NextResponse | null> {

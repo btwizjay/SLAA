@@ -6,8 +6,8 @@ import type { Identity } from "./validation";
 // to the done page. sessionStorage only: it dies with the tab, and the server
 // re-checks everything anyway.
 
-export type CheckedIdentity = { identity: Identity; checkedAt: number };
-export type DoneInfo = { slaaId: string; name: string; coachLinks: number };
+export type CheckedIdentity = { identity: Identity; checkedAt: number; registrationType: "coach" | "athlete" };
+export type DoneInfo = { slaaId: string; name: string; coachLinks: number; registrationType: "coach" | "athlete"; pendingUploads?: { qualificationIndex: number; file: string }[] };
 
 const IDENTITY_KEY = "slaa.identity";
 const DONE_KEY = "slaa.done";
