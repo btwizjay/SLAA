@@ -38,11 +38,11 @@ For a remote test database, set `TEST_ADMIN_DATABASE_URL` to its owner URL and `
 
 ## Production on Vercel
 
-Production URL: <https://slaa-datacollection.vercel.app>
+Production URL: <https://slaa-datacollection-gold.vercel.app>
 
 1. Bootstrap a new Neon database once using the direct owner connection. For this deployment the existing database already contains migrations 001-006 and reference data; preserve its registrations.
 2. Use a dedicated runtime login that inherits the restricted `slaa_app` role. Keep the owner connection outside the Vercel runtime. The app disables prepared statements for transaction pooling and defaults to three connections per function instance.
-3. Configure production environment variables from `.env.example`. Use real Cloudflare Turnstile keys, a strong `SESSION_SECRET`, and `NEXT_PUBLIC_SITE_URL=https://slaa-datacollection.vercel.app`. Allow the production hostname in the Turnstile widget. Do not upload `.env.local` or configure `DEV_ADMIN_EMAIL`.
+3. Configure production environment variables from `.env.example`. Use real Cloudflare Turnstile keys, a strong `SESSION_SECRET`, and `NEXT_PUBLIC_SITE_URL=https://slaa-datacollection-gold.vercel.app`. Allow the production hostname in the Turnstile widget. Do not upload `.env.local` or configure `DEV_ADMIN_EMAIL`.
 4. Link the Vercel project and GitHub repository, then deploy:
 
    ```bash
@@ -55,7 +55,7 @@ Production URL: <https://slaa-datacollection.vercel.app>
 
 Only production receives the production database credentials. Preview deployments require a separate database and their own Turnstile configuration before they can accept registrations. Functions run in Singapore (`sin1`), beside the Neon database.
 
-Staff sign-in is deferred for the first registration launch. To enable it later, set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `ADMIN_EMAILS` in Vercel, configure the Supabase Site URL and allowed redirect `https://slaa-datacollection.vercel.app/auth/callback`, and redeploy. Public registration is independent of Supabase Auth.
+Staff sign-in is deferred for the first registration launch. To enable it later, set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `ADMIN_EMAILS` in Vercel, configure the Supabase Site URL and allowed redirect `https://slaa-datacollection-gold.vercel.app/auth/callback`, and redeploy. Public registration is independent of Supabase Auth.
 
 Sinhala and Tamil consent translations are marked as drafts in their source files and should be reviewed by SLAA's language reviewers. Messaging API settings are reserved for future use; the app does not send SMS or coach invitations automatically.
 
@@ -66,7 +66,7 @@ Import a real coach CSV with an owner connection via `IMPORT_DATABASE_URL`. Revi
 ```bash
 IMPORT_DATABASE_URL=<owner-url> npm run import:sheet -- responses.csv --dry-run
 IMPORT_DATABASE_URL=<owner-url> npm run import:sheet -- responses.csv
-npm run qr -- https://slaa-datacollection.vercel.app/
+npm run qr -- https://slaa-datacollection-gold.vercel.app/
 ```
 
 The importer reserves provisional coach ID serials even on a dry run, because PostgreSQL sequence changes do not roll back. Never use the sample fixture as a production import.
