@@ -1,0 +1,32 @@
+name: Production health
+
+on:
+  schedule:
+    # Hourly avoids exhausting private-repository Actions minutes. Schedules
+    # can be delayed by GitHub; use an external monitor for minute-level alerts.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-health
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check production and its database
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if response=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 25 https://slaa-datacollection-gold.vercel.app/api/health) && echo "$response" | jq -e '.status == "ok"'; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo '::error::Production health check failed after three attempts. See docs/launch-runbook.md.'
+          exit 1

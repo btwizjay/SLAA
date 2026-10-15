@@ -11,13 +11,13 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: flattenIssues(parsed.error).message }, { status: 400 });
   const { identity, turnstileToken } = parsed.data;
 
-  const limited = await rateLimit(req, "identityCheck");
-  if (limited) return limited;
-  const failed = await requireTurnstile(req, turnstileToken);
-  if (failed) return failed;
-
-  const id = normalizeIdentity(identity);
   try {
+    const limited = await rateLimit(req, "identityCheck");
+    if (limited) return limited;
+    const failed = await requireTurnstile(req, turnstileToken);
+    if (failed) return failed;
+
+    const id = normalizeIdentity(identity);
     const rows = await sql<{ slaa_id: string; masked_name: string; district: string }[]>`
       SELECT slaa_id, masked_name, district
       FROM find_existing_member_public(${id.nic}, ${id.postalId})

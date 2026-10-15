@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FileCheck, History, LoaderCircle, PartyPopper, ShieldCheck, Trophy, UserRound, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm, useWatch, type FieldErrors, type Path } from "react-hook-form";
 import { CoachSection, type CoachStatus, type CoachUiState } from "@/components/CoachSection";
@@ -81,6 +82,7 @@ export function AthleteRegistration() {
   const { t, tErr } = useT();
   const [checked, setChecked] = useState<CheckedIdentity | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [canRecover, setCanRecover] = useState(false);
   const [restored, setRestored] = useState(false);
   const [coachInitial, setCoachInitial] = useState<CoachUiState | undefined>(undefined);
   const [coachState, setCoachState] = useState<CoachUiState | undefined>(undefined);
@@ -210,6 +212,7 @@ export function AthleteRegistration() {
   async function onSubmit(form: AthleteForm) {
     if (!checked) return;
     setFormError(null);
+    setCanRecover(false);
     setCoachAttempted(true);
     if (!coachesAnswered) {
       showProblems(["coaches"]);
@@ -217,7 +220,7 @@ export function AthleteRegistration() {
     }
     const token = (await turnstile.current?.getToken()) ?? "";
     if (!token) {
-      setFormError(t("securityNotLoaded"));
+      setFormError(t("securityHint"));
       return;
     }
     const result = await submitRegistration("/api/register/athlete", {
@@ -237,6 +240,7 @@ export function AthleteRegistration() {
       router.push("/register/done");
       return;
     }
+    setCanRecover(result.status === 0 || result.status === 409 || result.status >= 500);
     for (const [field, message] of Object.entries(result.fields)) {
       if (field.split(".")[0] in athleteFormSchema.shape) setError(field as Path<AthleteForm>, { message });
     }
@@ -347,6 +351,14 @@ export function AthleteRegistration() {
       </Section>
 
       <FormError message={formError} />
+      {canRecover && (
+        <div role="status" className="rounded-xl border bg-muted/40 p-4 text-sm">
+          <p>{t("recoverRegistration")}</p>
+          <Link href="/register/check" className="mt-2 inline-block font-semibold text-primary underline underline-offset-4">
+            {t("recoverId")}
+          </Link>
+        </div>
+      )}
       <Turnstile ref={turnstile} />
       <StickyActions>
         {/* what is still missing, right above the button */}

@@ -12,6 +12,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:load": "vitest run --config vitest.load.config.mts",
     "db:apply": "scripts/db-apply.sh",
     "import:sheet": "tsx scripts/import_google_sheet.ts",
     "qr": "tsx scripts/make_qr.ts"

@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { sql } from "./db";
 import { verifyTurnstile } from "./turnstile";
@@ -24,17 +24,31 @@ export function hashIp(ip: string) {
   return createHash("sha256").update(secret() + ":" + ip).digest("hex").slice(0, 32);
 }
 
+function positiveLimit(value: string | undefined, fallback: number) {
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n > 0 ? n : fallback;
+}
+
+// A venue/carrier can put hundreds of applicants behind one IP. CAPTCHA
+// remains mandatory for each identity check and registration. Search also
+// has a smaller per-browser allowance, using the signed pass as its key.
 export const LIMITS = {
-  identityCheck: Number(process.env.RATE_LIMIT_IDENTITY ?? 10),
-  search: Number(process.env.RATE_LIMIT_SEARCH ?? 10),
-  register: Number(process.env.RATE_LIMIT_REGISTER ?? 10),
+  identityCheck: positiveLimit(process.env.RATE_LIMIT_IDENTITY, 600),
+  search: positiveLimit(process.env.RATE_LIMIT_SEARCH, 6000),
+  register: positiveLimit(process.env.RATE_LIMIT_REGISTER, 600),
 };
+const SEARCH_SESSION_LIMIT = positiveLimit(process.env.RATE_LIMIT_SEARCH_SESSION, 60);
 
 /** Returns a 429 response when over the limit, otherwise null. */
 export async function rateLimit(req: Request, bucket: keyof typeof LIMITS): Promise<NextResponse | null> {
   const key = `${bucket}:${hashIp(clientIp(req))}`;
-  const [row] = await sql<{ ok: boolean }[]>`
-    SELECT rate_limit_hit(${key}, ${LIMITS[bucket]}, interval '1 minute') AS ok`;
+  const pass = bucket === "search" ? validPass(req) : null;
+  const [row] = pass
+    ? await sql<{ ok: boolean }[]>`
+        SELECT rate_limit_hit(${key}, ${LIMITS[bucket]}, interval '1 minute')
+          AND rate_limit_hit(${"searchSession:" + hashIp(pass)}, ${SEARCH_SESSION_LIMIT}, interval '1 minute') AS ok`
+    : await sql<{ ok: boolean }[]>`
+        SELECT rate_limit_hit(${key}, ${LIMITS[bucket]}, interval '1 minute') AS ok`;
   if (row.ok) return null;
   return NextResponse.json(
     { error: "Too many requests. Please wait a minute and try again." },
@@ -61,7 +75,8 @@ function sign(value: string) {
 
 export function issuePass(res: NextResponse) {
   const exp = Math.floor(Date.now() / 1000) + PASS_TTL_SECONDS;
-  const value = `${exp}.${sign(String(exp))}`;
+  const payload = `${exp}.${randomBytes(16).toString("base64url")}`;
+  const value = `${payload}.${sign(payload)}`;
   res.cookies.set(PASS_COOKIE, value, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -72,19 +87,27 @@ export function issuePass(res: NextResponse) {
 }
 
 export function hasValidPass(req: Request): boolean {
+  return validPass(req) !== null;
+}
+
+function validPass(req: Request): string | null {
   const raw = req.headers
     .get("cookie")
     ?.split(";")
     .map((c) => c.trim())
     .find((c) => c.startsWith(PASS_COOKIE + "="))
     ?.slice(PASS_COOKIE.length + 1);
-  if (!raw) return false;
-  const [exp, mac] = raw.split(".");
-  if (!exp || !mac) return false;
-  const expected = Buffer.from(sign(exp));
+  if (!raw) return null;
+  const parts = raw.split(".");
+  // Two-part passes from the previous deployment remain valid until expiry.
+  if (parts.length !== 2 && parts.length !== 3) return null;
+  const exp = Number(parts[0]);
+  if (!Number.isSafeInteger(exp) || exp <= Date.now() / 1000) return null;
+  const mac = parts.at(-1)!;
+  const expected = Buffer.from(sign(parts.slice(0, -1).join(".")));
   const given = Buffer.from(mac);
-  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return false;
-  return Number(exp) > Date.now() / 1000;
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+  return raw;
 }
 
 export async function readJson(req: Request): Promise<unknown> {

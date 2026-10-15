@@ -95,6 +95,11 @@ export const en = {
   securityNotLoaded: "The security check did not load. Check your connection and refresh the page.",
   serverError: "Something went wrong. Please try again.",
   networkError: "Could not reach the server. Check your connection and try again.",
+  securityHint: "Complete the security check below before continuing.",
+  securityVerified: "Security check complete.",
+  securityRetry: "Reload security check",
+  recoverRegistration: "If you submitted but did not receive your SLAA ID, check your ID again to see whether registration succeeded. Your draft stays saved in this tab.",
+  recoverId: "Check registration and recover my SLAA ID",
 
   doneTitle: "Registration Successful!",
   doneKeep:

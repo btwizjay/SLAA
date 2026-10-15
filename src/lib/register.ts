@@ -28,12 +28,16 @@ export async function parseRegistration<T extends { turnstileToken: string }>(
     }
     return { response: NextResponse.json({ error: message, fields }, { status: 400 }) };
   }
-  const limited = await rateLimit(req, "register");
-  if (limited) return { response: limited };
-  const failed = await requireTurnstile(req, parsed.data.turnstileToken);
-  if (failed) return { response: failed };
-  const ip = clientIp(req);
-  return { data: parsed.data, ipHash: hashIp(ip), ip };
+  try {
+    const limited = await rateLimit(req, "register");
+    if (limited) return { response: limited };
+    const failed = await requireTurnstile(req, parsed.data.turnstileToken);
+    if (failed) return { response: failed };
+    const ip = clientIp(req);
+    return { data: parsed.data, ipHash: hashIp(ip), ip };
+  } catch (e) {
+    return { response: errorResponse(e, "registration checks") };
+  }
 }
 
 /**

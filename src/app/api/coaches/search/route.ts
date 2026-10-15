@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { hasValidPass, rateLimit } from "@/lib/guard";
 import { initialsName } from "@/lib/names";
 import { DISTRICTS } from "@/lib/reference";
+import { errorResponse } from "@/lib/register";
 
 // Coach picker search. Returns name with initials, district and SLAA ID only:
 // never phone, email, NIC, date of birth or full name.
@@ -29,28 +30,32 @@ export async function GET(req: Request) {
   const suggest = q.length === 0 && (district || near);
   if (q.length < 2 && !suggest) return NextResponse.json({ results: [] });
 
-  const limited = await rateLimit(req, "search");
-  if (limited) return limited;
+  try {
+    const limited = await rateLimit(req, "search");
+    if (limited) return limited;
 
-  const like = "%" + q.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
-  const only = district || (suggest ? near : "");
-  const rank = district || near;
-  const rows = await sql<{ slaa_id: string; name_with_initials: string | null; full_name: string; district: string }[]>`
-    SELECT m.slaa_id, m.name_with_initials, m.full_name, m.district
-    FROM coach c JOIN member m USING (slaa_id)
-    WHERE m.status IN ('pending', 'verified')
-      AND (${suggest ? true : false}
-           OR m.name_with_initials ILIKE ${like} OR m.full_name ILIKE ${like}
-           OR m.slaa_id ILIKE ${q.toUpperCase() + "%"})
-      AND (${only} = '' OR m.district = ${only})
-    ORDER BY (m.district = ${rank}) DESC, m.name_with_initials NULLS LAST, m.slaa_id
-    LIMIT ${suggest ? 8 : 20}`;
+    const like = "%" + q.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
+    const only = district || (suggest ? near : "");
+    const rank = district || near;
+    const rows = await sql<{ slaa_id: string; name_with_initials: string | null; full_name: string; district: string }[]>`
+      SELECT m.slaa_id, m.name_with_initials, m.full_name, m.district
+      FROM coach c JOIN member m USING (slaa_id)
+      WHERE m.status IN ('pending', 'verified')
+        AND (${suggest ? true : false}
+             OR m.name_with_initials ILIKE ${like} OR m.full_name ILIKE ${like}
+             OR m.slaa_id ILIKE ${q.toUpperCase() + "%"})
+        AND (${only} = '' OR m.district = ${only})
+      ORDER BY (m.district = ${rank}) DESC, m.name_with_initials NULLS LAST, m.slaa_id
+      LIMIT ${suggest ? 8 : 20}`;
 
-  return NextResponse.json({
-    results: rows.map((r) => ({
-      slaaId: r.slaa_id,
-      name: r.name_with_initials || initialsName(r.full_name),
-      district: r.district,
-    })),
-  });
+    return NextResponse.json({
+      results: rows.map((r) => ({
+        slaaId: r.slaa_id,
+        name: r.name_with_initials || initialsName(r.full_name),
+        district: r.district,
+      })),
+    });
+  } catch (e) {
+    return errorResponse(e, "coach search");
+  }
 }

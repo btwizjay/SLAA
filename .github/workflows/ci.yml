@@ -44,6 +44,7 @@ jobs:
           bash scripts/db-apply.sh "$TEST_ADMIN_DATABASE_URL"
           psql "$TEST_ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "ALTER ROLE slaa_app PASSWORD 'ci-only-password'"
       - run: npm test
+      - run: npm run test:load
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

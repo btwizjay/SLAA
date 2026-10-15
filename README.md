@@ -71,6 +71,8 @@ npm run qr -- https://slaa-datacollection-gold.vercel.app/
 
 The importer reserves provisional coach ID serials even on a dry run, because PostgreSQL sequence changes do not roll back. Never use the sample fixture as a production import.
 
-People at a stadium may share carrier IP addresses. If legitimate users see rate limits, adjust `RATE_LIMIT_IDENTITY`, `RATE_LIMIT_SEARCH` and `RATE_LIMIT_REGISTER` in Vercel, then redeploy.
+The event limits allow 600 identity checks, 600 registration submissions and 6,000 coach searches per IP per minute, with an additional 60-search/minute browser limit. CAPTCHA and identity uniqueness remain enabled. `npm run test:load` verifies 500 synthetic signups at concurrency 50 in a disposable database, including a shared-IP scenario. It does not test Vercel scaling or real CAPTCHA.
+
+See [the launch runbook](docs/launch-runbook.md) for the health endpoint, hourly monitoring, encrypted backups and restore rehearsal, submission recovery, incident steps and remaining account-owner checks.
 
 The runtime dependency audit is kept separate from development tooling. `shadcn` and Neon configuration tools are build/development dependencies. Next.js's PostCSS dependency is overridden to a patched compatible 8.x release. Development tooling still depends on `braces`, for which npm currently provides no patched release; avoid processing untrusted generator patterns.

@@ -37,16 +37,20 @@ export function IdentityCheck() {
     }
     setErrors({});
     setBusy(true);
+    let requestTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const token = (await turnstile.current?.getToken()) ?? "";
       if (!token) {
-        setFormError(t("securityNotLoaded"));
+        setFormError(t("securityHint"));
         return;
       }
+      const controller = new AbortController();
+      requestTimer = setTimeout(() => controller.abort(), 30000);
       const res = await fetch("/api/identity-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identity: parsed.data, turnstileToken: token }),
+        signal: controller.signal,
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -62,6 +66,7 @@ export function IdentityCheck() {
     } catch {
       setFormError(t("networkError"));
     } finally {
+      clearTimeout(requestTimer);
       setBusy(false);
       turnstile.current?.reset();
     }
