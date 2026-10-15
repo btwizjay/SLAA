@@ -30,6 +30,10 @@ production registration on a phone, save the SLAA ID, then check the same NIC
 again to confirm the existing ID is recovered. Do not use synthetic identities
 in the live register. Test normal venue Wi-Fi and a mobile connection.
 
+On 16 October 2026, the owner confirmed completing a real production
+registration and receiving the final SLAA ID card. That browser signup check
+is complete; venue-network checks remain useful before the event.
+
 ## Health and incident handling
 
 `GET /api/health` queries PostgreSQL and returns only `{"status":"ok"}` (200)
@@ -116,5 +120,4 @@ remaining compute/storage/network quotas in the actual Neon account.
   Until then, assign an authorized database operator to handle support.
 - Supply the real coach CSV before expecting existing coaches in the picker.
   Unlisted-coach submissions remain available. Never import the test fixture.
-- Name a support person for applicants, verify failure notifications, and
-  complete the human production rehearsal described above.
+- Name a support person for applicants and verify failure notifications.

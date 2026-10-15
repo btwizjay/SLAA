@@ -17,6 +17,7 @@ database on the same Neon endpoint, not synthetic registrations in production.
 | Search abuse protection | One browser throttled; another on the same IP remained usable |
 | Unit, SQL and API tests | 74 passed |
 | Mobile browser tests | 13 passed, including lost-response ID recovery and CAPTCHA script reload |
+| Real production registration | User confirmed successful submission and receipt of the final SLAA ID card on 16 October 2026 |
 | Encrypted production backup | 12 tables, 3 members in the consistent snapshot |
 | Restore rehearsal | All table counts/checksums matched; restricted access verified; disposable restore database removed |
 
@@ -28,7 +29,7 @@ three-connection pool. They do not measure Vercel HTTP performance, real human
 CAPTCHA completion, or 500 simultaneous browser sessions. No claim of that
 larger concurrency has been established.
 
-The production user previously confirmed that real Cloudflare verification
-opens the details form. A complete authorized human production submission is
-still required, together with the account-owner and SLAA checks in the
+On 16 October 2026, the user confirmed completing a real production registration
+and receiving the final SLAA ID card. The human CAPTCHA-to-confirmation check
+has passed. The remaining account-owner and SLAA checks are listed in the
 [launch runbook](launch-runbook.md).
