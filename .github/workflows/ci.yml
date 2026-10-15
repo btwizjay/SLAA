@@ -1,0 +1,49 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: slaa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/slaa_test
+      TEST_DATABASE_URL: postgres://slaa_app:ci-only-password@localhost:5432/slaa_test
+      DATABASE_URL: postgres://slaa_app:ci-only-password@localhost:5432/slaa_test
+      SESSION_SECRET: ci-only-session-secret-not-for-production
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Prepare isolated test database
+        run: |
+          bash scripts/db-apply.sh "$TEST_ADMIN_DATABASE_URL"
+          psql "$TEST_ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "ALTER ROLE slaa_app PASSWORD 'ci-only-password'"
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

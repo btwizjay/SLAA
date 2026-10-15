@@ -1,0 +1,12 @@
+.git
+.vercel
+node_modules
+.next
+.next-*
+.env*
+coverage
+test-results
+playwright-report
+import_errors.csv
+import_warnings.csv
+*.tsbuildinfo
