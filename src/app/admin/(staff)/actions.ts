@@ -9,7 +9,9 @@ import { isValidSlaaId } from "@/lib/slaa-id";
 // Every admin action: check the session, change the row, write audit_log.
 
 function id(formData: FormData, key = "slaaId") {
-  const v = String(formData.get(key) ?? "").trim().toUpperCase();
+  const v = String(formData.get(key) ?? "")
+    .trim()
+    .toUpperCase();
   if (!isValidSlaaId(v)) throw new Error(`Invalid SLAA ID: ${v}`);
   return v;
 }
@@ -34,7 +36,10 @@ export async function verifyMember(formData: FormData) {
 export async function suspendMember(formData: FormData) {
   const admin = await requireAdmin();
   const slaaId = id(formData);
-  const reason = String(formData.get("reason") ?? "").slice(0, 500);
+  const reason = String(formData.get("reason") ?? "")
+    .trim()
+    .slice(0, 500);
+  if (!reason) redirect(`/admin/members/${slaaId}?actionError=reason`);
   await sql.begin(async (tx) => {
     const updated = await tx`
       UPDATE member SET status = 'suspended'
@@ -57,11 +62,21 @@ export async function mergeMembers(formData: FormData) {
   const admin = await requireAdmin();
   const keep = id(formData, "keep");
   const dup = id(formData, "duplicate");
+  const reason = String(formData.get("reason") ?? "")
+    .trim()
+    .slice(0, 500);
+  if (
+    !reason ||
+    String(formData.get("confirm") ?? "")
+      .trim()
+      .toUpperCase() !== keep
+  )
+    redirect("/admin/duplicates?error=confirm");
   if (keep === dup) throw new Error("Choose two different records");
 
   await sql.begin(async (tx) => {
     const rows = await tx<{ slaa_id: string; status: string }[]>`
-      SELECT slaa_id, status FROM member WHERE slaa_id IN (${keep}, ${dup}) FOR UPDATE`;
+      SELECT slaa_id, status FROM member WHERE slaa_id IN (${keep}, ${dup}) ORDER BY slaa_id FOR UPDATE`;
     if (rows.length !== 2 || rows.some((r) => r.status === "merged")) {
       throw new Error("Both records must exist and not already be merged");
     }
@@ -74,7 +89,8 @@ export async function mergeMembers(formData: FormData) {
     const dupCoach = await tx`SELECT 1 FROM coach WHERE slaa_id = ${dup}`;
     const keepCoach = await tx`SELECT 1 FROM coach WHERE slaa_id = ${keep}`;
     if (dupCoach.length && !keepCoach.length) {
-      const [c] = await tx`SELECT slaa_license_no FROM coach WHERE slaa_id = ${dup}`;
+      const [c] =
+        await tx`SELECT slaa_license_no FROM coach WHERE slaa_id = ${dup}`;
       await tx`UPDATE coach SET slaa_license_no = NULL WHERE slaa_id = ${dup}`;
       await tx`
         INSERT INTO coach (slaa_id, slaa_license_no, license_level, disciplines, is_verified, verified_by, verified_at)
@@ -120,8 +136,9 @@ export async function mergeMembers(formData: FormData) {
 
     await tx`
       INSERT INTO audit_log (actor, action, slaa_id, details)
-      VALUES (${admin}, 'merge', ${keep}, ${tx.json({ merged: dup })}),
-             (${admin}, 'merged_into', ${dup}, ${tx.json({ kept: keep })})`;
+      VALUES (${admin}, 'merge', ${keep}, ${tx.json({ merged: dup, reason })}),
+             (${admin}, 'merged_into', ${dup}, ${tx.json({ kept: keep, reason })})`;
+    await tx`UPDATE athlete SET main_events=ARRAY(SELECT event_code FROM athlete_event WHERE athlete_id=${keep} ORDER BY rank) WHERE slaa_id=${keep} AND EXISTS(SELECT 1 FROM athlete_event WHERE athlete_id=${keep})`;
   });
   revalidatePath("/admin/duplicates");
   redirect(`/admin/members/${keep}`);
@@ -148,9 +165,17 @@ export async function resolveRequest(formData: FormData) {
   const requestId = Number(formData.get("requestId"));
   const coachId = id(formData, "coachId");
   await sql.begin(async (tx) => {
-    const [coach] = await tx`SELECT 1 FROM coach WHERE slaa_id = ${coachId}`;
+    const [coach] =
+      await tx`SELECT 1 FROM coach c JOIN member m USING(slaa_id) WHERE c.slaa_id = ${coachId} AND m.status IN ('pending','verified')`;
     if (!coach) throw new Error(`${coachId} is not a registered coach`);
-    const [r] = await tx<{ requested_by: string; relationship_type: string; start_year: number | null; end_year: number | null }[]>`
+    const [r] = await tx<
+      {
+        requested_by: string;
+        relationship_type: string;
+        start_year: number | null;
+        end_year: number | null;
+      }[]
+    >`
       UPDATE coach_request SET status = 'registered', resolved_coach = ${coachId}
       WHERE id = ${requestId} AND status IN ('pending', 'invited')
       RETURNING requested_by, relationship_type, start_year, end_year`;
@@ -191,7 +216,7 @@ export async function approveLink(formData: FormData) {
   const linkId = Number(formData.get("linkId"));
   await sql.begin(async (tx) => {
     const [l] = await tx<{ athlete_id: string; coach_id: string }[]>`
-      UPDATE athlete_coach SET is_approved_by_coach = true
+      UPDATE athlete_coach SET is_approved_by_coach = true,review_status='approved',reviewed_by=${admin},reviewed_at=now(),review_reason='Confirmed by staff on behalf of the coach'
       WHERE id = ${linkId} AND NOT is_approved_by_coach
       RETURNING athlete_id, coach_id`;
     if (!l) return;
@@ -210,15 +235,21 @@ export async function approveLink(formData: FormData) {
 export async function deleteMember(formData: FormData) {
   const admin = await requireAdmin();
   const slaaId = id(formData);
-  const confirm = String(formData.get("confirm") ?? "").trim().toUpperCase();
-  const reason = String(formData.get("reason") ?? "").trim().slice(0, 500);
-  if (confirm !== slaaId) redirect(`/admin/members/${slaaId}?deleteError=confirm`);
+  const confirm = String(formData.get("confirm") ?? "")
+    .trim()
+    .toUpperCase();
+  const reason = String(formData.get("reason") ?? "")
+    .trim()
+    .slice(0, 500);
+  if (confirm !== slaaId)
+    redirect(`/admin/members/${slaaId}?deleteError=confirm`);
   if (!reason) redirect(`/admin/members/${slaaId}?deleteError=reason`);
 
   try {
     await sql`SELECT admin_delete_member(${slaaId}, ${admin}, ${reason})`;
   } catch (e) {
-    if ((e as { code?: string }).code === "55000") redirect(`/admin/members/${slaaId}?deleteError=merged`);
+    if ((e as { code?: string }).code === "55000")
+      redirect(`/admin/members/${slaaId}?deleteError=merged`);
     throw e;
   }
   revalidatePath("/admin");
@@ -228,10 +259,17 @@ export async function deleteMember(formData: FormData) {
 /** Delete several ticked accounts from the members list. */
 export async function bulkDeleteMembers(formData: FormData) {
   const admin = await requireAdmin();
-  const ids = [...new Set(formData.getAll("ids").map((v) => String(v).trim().toUpperCase()))];
+  const ids = [
+    ...new Set(
+      formData.getAll("ids").map((v) => String(v).trim().toUpperCase()),
+    ),
+  ];
   const confirm = String(formData.get("confirm") ?? "").trim();
-  const reason = String(formData.get("reason") ?? "").trim().slice(0, 500);
-  if (!ids.length || ids.length > 100 || !ids.every(isValidSlaaId)) redirect("/admin?bulkError=selection");
+  const reason = String(formData.get("reason") ?? "")
+    .trim()
+    .slice(0, 500);
+  if (!ids.length || ids.length > 100 || !ids.every(isValidSlaaId))
+    redirect("/admin?bulkError=selection");
   if (confirm !== "DELETE") redirect("/admin?bulkError=confirm");
   if (!reason) redirect("/admin?bulkError=reason");
 

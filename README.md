@@ -2,7 +2,7 @@
 
 Athlete registration for Sri Lanka Athletics, in English, Sinhala and Tamil. Athletes check an NIC or Postal ID, provide their details and events, and receive an SLAA ID. Minors also provide guardian details. Coaches are imported by staff; athletes can select registered coaches or submit an unlisted coach for follow-up.
 
-The app uses Next.js 15, React 19, Neon PostgreSQL, Cloudflare Turnstile and optional Supabase Auth for staff. PostgreSQL enforces identity uniqueness, coach relationships and event constraints. Public lookups return masked names; staff actions require an allow-listed session and write audit records.
+The app uses Next.js 15, React 19, Neon PostgreSQL and Cloudflare Turnstile. Staff use app-managed password authentication with signed JWT cookies, database-backed revocation and owner-managed accounts. Public lookups return masked names; staff changes are authenticated and audited. No Supabase account is required.
 
 ## Development
 
@@ -18,11 +18,11 @@ cp .env.example .env.local
 
 Set `DATABASE_URL` to the pooled runtime connection, `DATABASE_URL_UNPOOLED` to the owner connection for schema work, and `SESSION_SECRET` to a random value of at least 32 characters. Development can use the Turnstile test keys in `.env.example`. Run `npm run dev`.
 
-`DEV_ADMIN_EMAIL` enables staff access only when `NODE_ENV=development`. Never configure it in production. Without Supabase Auth credentials, staff pages remain protected and sign-in is unavailable; public registration still works.
+`DEV_ADMIN_EMAIL` enables owner access only when `NODE_ENV=development`. Never configure it in production. For real staff sign-in, configure the owner connection in `.env.local`, then run `npm run admin:bootstrap`. See [the admin guide](docs/admin-guide.md) for setup, login, features and recovery.
 
 ## Verification
 
-Tests reset their database. Always use a separate database with `test` in its name. The bootstrap script applies all six schema files and reference data in order to a **new** database; it is not an incremental migration runner and must not be rerun against an already migrated production database.
+Tests reset their database. Always use a separate database with `test` in its name. The bootstrap script applies migrations 001?007 and reference data in order to a **new** database; it is not an incremental migration runner and must not be rerun against an already migrated production database.
 
 ```bash
 createdb slaa_test
@@ -40,7 +40,7 @@ For a remote test database, set `TEST_ADMIN_DATABASE_URL` to its owner URL and `
 
 Production URL: <https://slaa-datacollection-gold.vercel.app>
 
-1. Bootstrap a new Neon database once using the direct owner connection. For this deployment the existing database already contains migrations 001-006 and reference data; preserve its registrations.
+1. Bootstrap a new Neon database once using the direct owner connection. For this deployment the existing database already contains migrations 001-007 and reference data; preserve its registrations.
 2. Use a dedicated runtime login that inherits the restricted `slaa_app` role. Keep the owner connection outside the Vercel runtime. The app disables prepared statements for transaction pooling and defaults to three connections per function instance.
 3. Configure production environment variables from `.env.example`. Use real Cloudflare Turnstile keys, a strong `SESSION_SECRET`, and `NEXT_PUBLIC_SITE_URL=https://slaa-datacollection-gold.vercel.app`. Allow the production hostname in the Turnstile widget. Do not upload `.env.local` or configure `DEV_ADMIN_EMAIL`.
 4. Link the Vercel project and GitHub repository, then deploy:
@@ -55,13 +55,13 @@ Production URL: <https://slaa-datacollection-gold.vercel.app>
 
 Only production receives the production database credentials. Preview deployments require a separate database and their own Turnstile configuration before they can accept registrations. Functions run in Singapore (`sin1`), beside the Neon database.
 
-Staff sign-in is deferred for the first registration launch. To enable it later, set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `ADMIN_EMAILS` in Vercel, configure the Supabase Site URL and allowed redirect `https://slaa-datacollection-gold.vercel.app/auth/callback`, and redeploy. Public registration is independent of Supabase Auth.
+Staff sign-in uses the existing Neon database and a dedicated `ADMIN_JWT_SECRET`. Run `npm run admin:bootstrap` to create the owner `ceo@ascendit.dev`; keep its generated `ADMIN_INITIAL_PASSWORD` in the ignored local environment file. Upload only the signing secret to Vercel. The owner manages other staff accounts from the admin panel; no Supabase configuration is needed. See [the admin guide](docs/admin-guide.md).
 
 Sinhala and Tamil consent translations are marked as drafts in their source files and should be reviewed by SLAA's language reviewers. Messaging API settings are reserved for future use; the app does not send SMS or coach invitations automatically.
 
 ## Operations
 
-Import a real coach CSV with an owner connection via `IMPORT_DATABASE_URL`. Review errors and warnings before importing; these reports can contain personal data and are ignored by Git. The database currently has no coaches until staff supplies an import.
+The admin panel provides a reviewed coach CSV import and individual coach creation. For legacy Google-sheet rows with provisional IDs, import a real coach CSV with an owner connection via `IMPORT_DATABASE_URL`. Review errors and warnings before importing; these reports can contain personal data and are ignored by Git. The database currently has no coaches until staff supplies an import.
 
 ```bash
 IMPORT_DATABASE_URL=<owner-url> npm run import:sheet -- responses.csv --dry-run

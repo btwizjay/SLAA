@@ -14,16 +14,16 @@
     "test:e2e": "playwright test",
     "test:load": "vitest run --config vitest.load.config.mts",
     "db:apply": "scripts/db-apply.sh",
+    "admin:bootstrap": "tsx scripts/admin-bootstrap.ts",
     "import:sheet": "tsx scripts/import_google_sheet.ts",
     "qr": "tsx scripts/make_qr.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
     "@hookform/resolvers": "^5.9.1",
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.117.3",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
+    "jose": "^6.2.12",
     "lucide-react": "^1.57.0",
     "next": "15.5.28",
     "postgres": "^3.4.9",
@@ -36,9 +36,9 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3",
     "@neon/config": "^1.9.1",
     "@neon/env": "^1.6.2",
-    "@eslint/eslintrc": "^3",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.19.2",

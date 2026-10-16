@@ -1,48 +1,50 @@
 import { redirect } from "next/navigation";
-import { getAdmin, isAllowListed, supabaseConfigured, supabaseServer } from "@/lib/admin-auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-
-export const metadata = { title: "Admin sign in · SLAA" };
-
-async function sendLink(formData: FormData) {
-  "use server";
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  // Only allow-listed emails get a link; everyone sees the same reply.
-  if (isAllowListed(email) && supabaseConfigured()) {
-    const supabase = await supabaseServer();
-    const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${site}/auth/callback`, shouldCreateUser: true },
-    });
-    if (error) console.error("magic link failed", error.message);
-  }
-  redirect("/admin/login?sent=1");
-}
-
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ sent?: string; error?: string }> }) {
-  if (await getAdmin()) redirect("/admin");
-  const { sent, error } = await searchParams;
-
+import { getAdminSession } from "@/lib/admin-auth";
+import { ActionForm } from "@/components/admin/ActionForm";
+import { loginAction } from "../auth-actions";
+export const metadata = { title: "Staff sign in · SLAA" };
+export default async function LoginPage() {
+  const session = await getAdminSession();
+  if (session)
+    redirect(
+      session.must_change_password ? "/admin/account" : "/admin/overview",
+    );
   return (
-    <div className="mx-auto flex w-full max-w-sm flex-col gap-6 px-4 py-10 sm:py-16">
-      <h1 className="text-2xl font-bold">SLAA staff sign in</h1>
-      {sent ? (
-        <p className="rounded-lg border bg-background p-4 text-sm">
-          If this email belongs to an SLAA admin, a sign-in link has been sent. Open it on this device.
+    <div className="mx-auto w-full max-w-md px-4 py-12">
+      <div className="rounded-2xl border bg-background p-6 shadow-sm">
+        <p className="text-sm font-medium text-primary">Sri Lanka Athletics</p>
+        <h1 className="mt-1 text-2xl font-bold">Staff sign in</h1>
+        <p className="mb-6 mt-2 text-sm text-muted-foreground">
+          Manage the national register with your staff account.
         </p>
-      ) : (
-        <form action={sendLink} className="flex flex-col gap-3">
-          <label htmlFor="email" className="text-sm font-medium">Email</label>
-          <Input id="email" name="email" type="email" required autoComplete="email" className="h-11 text-base" />
-          <Button type="submit" className="h-11">Email me a sign-in link</Button>
-        </form>
-      )}
-      {error && <p className="text-sm text-destructive">The sign-in link was invalid or expired. Please try again.</p>}
-      {!supabaseConfigured() && (
-        <p className="text-xs text-muted-foreground">Supabase Auth is not configured on this server.</p>
-      )}
+        <ActionForm action={loginAction} submit="Sign in">
+          <label className="text-sm font-medium">
+            Email
+            <input
+              name="email"
+              type="email"
+              autoComplete="username"
+              required
+              maxLength={254}
+              className="mt-1 h-11 w-full rounded-lg border px-3"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Password
+            <input
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              maxLength={128}
+              className="mt-1 h-11 w-full rounded-lg border px-3"
+            />
+          </label>
+        </ActionForm>
+        <p className="mt-5 text-xs text-muted-foreground">
+          Contact the register owner if you need an account or a password reset.
+        </p>
+      </div>
     </div>
   );
 }

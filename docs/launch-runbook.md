@@ -115,9 +115,9 @@ remaining compute/storage/network quotas in the actual Neon account.
   Neon/Vercel quotas. No paid upgrade is performed by this change.
 - Have native Sinhala and Tamil reviewers approve the consent translations;
   their draft status has not been silently removed.
-- Staff sign-in remains deferred as requested. Enable Supabase credentials
-  and allow-listed staff accounts before staff need web exports/corrections.
-  Until then, assign an authorized database operator to handle support.
+- Staff sign-in uses app-managed JWT sessions and owner-managed accounts in Neon.
+  The owner is `ceo@ascendit.dev`; see [the admin guide](admin-guide.md) for
+  credentials, first sign-in, staff accounts and recovery.
 - Supply the real coach CSV before expecting existing coaches in the picker.
   Unlisted-coach submissions remain available. Never import the test fixture.
 - Name a support person for applicants and verify failure notifications.

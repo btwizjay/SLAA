@@ -5,7 +5,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
-      "server-only": path.resolve(import.meta.dirname, "tests/support/empty.ts"),
+      "server-only": path.resolve(
+        import.meta.dirname,
+        "tests/support/empty.ts",
+      ),
     },
   },
   test: {
@@ -13,8 +16,11 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     fileParallelism: false,
     env: {
-      DATABASE_URL: process.env.TEST_DATABASE_URL ?? "postgres://slaa_app:devpass@localhost:5432/slaa_test",
+      DATABASE_URL:
+        process.env.TEST_DATABASE_URL ??
+        "postgres://slaa_app:devpass@localhost:5432/slaa_test",
       SESSION_SECRET: "test-secret",
+      ADMIN_JWT_SECRET: "test-admin-jwt-secret-only-not-for-production-1234",
       TURNSTILE_SECRET_KEY: "test",
       RATE_LIMIT_IDENTITY: "1000",
       RATE_LIMIT_SEARCH: "1000",

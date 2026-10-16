@@ -1,58 +1,54 @@
 import "server-only";
-import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-
-// Admin access = a Supabase Auth session whose email is in ADMIN_EMAILS.
-// Checked on the server for every admin page, action and API request.
-
-export function adminEmails(): string[] {
-  return (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function isAllowListed(email: string | null | undefined) {
-  return !!email && adminEmails().includes(email.trim().toLowerCase());
-}
-
-export function supabaseConfigured() {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
-
-export async function supabaseServer() {
-  const store = await cookies();
-  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: {
-      getAll: () => store.getAll(),
-      setAll: (list) => {
-        try {
-          list.forEach(({ name, value, options }) => store.set(name, value, options));
-        } catch {
-          // called from a server component: the middleware refreshes cookies instead
-        }
-      },
-    },
-  });
-}
-
-/** The signed-in admin's email, or null. */
-export async function getAdmin(): Promise<string | null> {
+import { sql } from "./db";
+import { ADMIN_COOKIE, readAdminToken } from "./admin-session";
+export type StaffSession = {
+  id: string;
+  email: string;
+  role: "owner" | "admin";
+  must_change_password: boolean;
+  sessionId: string;
+};
+export async function getAdminSession(): Promise<StaffSession | null> {
   const dev = process.env.DEV_ADMIN_EMAIL;
-  if (dev && process.env.NODE_ENV === "development") return dev;
-  if (!supabaseConfigured()) return null;
-
-  const supabase = await supabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return isAllowListed(user?.email) ? user!.email!.toLowerCase() : null;
+  if (dev && process.env.NODE_ENV === "development") {
+    return {
+      id: "dev",
+      email: dev,
+      role: "owner",
+      must_change_password: false,
+      sessionId: "dev",
+    };
+  }
+  const token = (await cookies()).get(ADMIN_COOKIE)?.value;
+  if (!token) return null;
+  const claims = await readAdminToken(token);
+  if (!claims) return null;
+  const [staff] = await sql<Omit<StaffSession, "sessionId">[]>`
+    SELECT u.id, u.email, u.role, u.must_change_password
+    FROM admin_staff u JOIN admin_session s ON s.staff_id = u.id
+    WHERE u.id = ${claims.staffId}::uuid AND s.id = ${claims.sessionId}::uuid
+      AND u.active AND s.revoked_at IS NULL AND s.expires_at > now()`;
+  return staff ? { ...staff, sessionId: claims.sessionId } : null;
 }
-
-/** For pages and server actions: redirects to the login page when not an admin. */
-export async function requireAdmin(): Promise<string> {
-  const email = await getAdmin();
-  if (!email) redirect("/admin/login");
-  return email;
+export async function getAdmin(): Promise<string | null> {
+  const session = await getAdminSession();
+  return session && !session.must_change_password ? session.email : null;
+}
+export async function requireAdminSession(allowPasswordChange = false) {
+  const session = await getAdminSession();
+  if (!session) redirect("/admin/login");
+  if (session.must_change_password && !allowPasswordChange)
+    redirect("/admin/account");
+  return session;
+}
+export async function requireAdmin() {
+  return (await requireAdminSession()).email;
+}
+export async function requireOwner() {
+  const session = await requireAdminSession();
+  if (session.role !== "owner")
+    throw new Error("Only the owner can manage staff accounts.");
+  return session;
 }

@@ -27,10 +27,13 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
-      DATABASE_URL: process.env.TEST_DATABASE_URL ?? "postgres://slaa_app:devpass@localhost:5432/slaa_test",
+      DATABASE_URL:
+        process.env.TEST_DATABASE_URL ??
+        "postgres://slaa_app:devpass@localhost:5432/slaa_test",
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
       TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
       SESSION_SECRET: "e2e-secret",
+      ADMIN_JWT_SECRET: "e2e-admin-jwt-secret-only-not-for-production-1234",
       RATE_LIMIT_IDENTITY: "1000",
       RATE_LIMIT_SEARCH: "1000",
       RATE_LIMIT_REGISTER: "1000",
