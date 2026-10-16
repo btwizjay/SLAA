@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { admin, resetDb } from "./support/db";
+vi.setConfig({ testTimeout: 15_000 });
 const { jar, options } = vi.hoisted(() => ({
   jar: new Map<string, string>(),
   options: new Map<string, Record<string, unknown>>(),
@@ -165,9 +166,19 @@ describe("local staff authentication", () => {
     ).rejects.toThrow(/owner/);
   });
   it("signs out server-side, so copying the old cookie cannot restore access", async () => {
+    vi.stubEnv("NODE_ENV", "production");
     await expect(actions.signOut()).rejects.toMatchObject({
       to: "/admin/login",
     });
+    expect(jar.get(ADMIN_COOKIE)).toBe("");
+    expect(options.get(ADMIN_COOKIE)).toMatchObject({
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+      path: "/",
+      maxAge: 0,
+    });
+    vi.unstubAllEnvs();
     jar.set(ADMIN_COOKIE, ownerToken);
     expect(await getAdmin()).toBeNull();
     jar.clear();

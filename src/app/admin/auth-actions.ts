@@ -90,7 +90,13 @@ export async function signOut() {
   const session = await getAdminSession();
   if (session && session.id !== "dev")
     await sql`UPDATE admin_session SET revoked_at = now() WHERE id = ${session.sessionId}`;
-  (await cookies()).delete(ADMIN_COOKIE);
+  (await cookies()).set(ADMIN_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/",
+    maxAge: 0,
+  });
   redirect("/admin/login");
 }
 export async function changePassword(
