@@ -129,6 +129,15 @@ export async function editProfile(
       if (current.coach)
         await tx`UPDATE coach SET slaa_license_no=${p.licenseNo || null},license_level=${p.licenseLevel || null},disciplines=${[...new Set(p.disciplines)]} WHERE slaa_id=${id}`;
       await tx`INSERT INTO audit_log(actor,action,slaa_id,details) VALUES(${actor},'edit_profile',${id},${tx.json({ reason: p.reason })})`;
+      const [verification] =
+        await tx`SELECT status FROM member_verification WHERE slaa_id=${id} FOR UPDATE`;
+      if (verification) {
+        await tx`UPDATE member_verification SET status=${verification.status === "rejected" ? "rejected" : "needs_review"},verified_by=NULL,verified_at=NULL,
+          follow_up_at=CASE WHEN ${verification.status === "approved"} THEN NULL ELSE follow_up_at END,version=version+1,updated_at=now() WHERE slaa_id=${id}`;
+        if (verification.status === "approved")
+          await tx`UPDATE member SET status='pending' WHERE slaa_id=${id} AND status='verified'`;
+        await tx`INSERT INTO audit_log(actor,action,slaa_id,details) VALUES(${actor},'verification_profile_changed',${id},${tx.json({ reason: p.reason })})`;
+      }
     });
   } catch (e) {
     return failure(e);

@@ -22,7 +22,7 @@ Set `DATABASE_URL` to the pooled runtime connection, `DATABASE_URL_UNPOOLED` to 
 
 ## Verification
 
-Tests reset their database. Always use a separate database with `test` in its name. The bootstrap script applies migrations 001?007 and reference data in order to a **new** database; it is not an incremental migration runner and must not be rerun against an already migrated production database.
+Tests reset their database. Always use a separate database with `test` in its name. The bootstrap script applies migrations 001-008 and reference data in order to a **new** database; it is not an incremental migration runner and must not be rerun against an already migrated production database.
 
 ```bash
 createdb slaa_test
@@ -34,13 +34,13 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-For a remote test database, set `TEST_ADMIN_DATABASE_URL` to its owner URL and `TEST_DATABASE_URL` to an application login that inherits `slaa_app`. Browser tests use development-only staff access and Cloudflare's official test keys; they need internet access. GitHub Actions runs the tests and build against an isolated PostgreSQL service.
+For a remote test database, set `TEST_ADMIN_DATABASE_URL` to its owner URL and `TEST_DATABASE_URL` to an application login that inherits `slaa_app`. Browser tests cover development-only owner access, a real restricted student JWT session, and Cloudflare's official test keys; they need internet access. GitHub Actions runs the tests and build against an isolated PostgreSQL service.
 
 ## Production on Vercel
 
 Production URL: <https://slaa-datacollection-gold.vercel.app>
 
-1. Bootstrap a new Neon database once using the direct owner connection. For this deployment the existing database already contains migrations 001-007 and reference data; preserve its registrations.
+1. Bootstrap a new Neon database once using the direct owner connection. For this deployment the existing database already contains migrations 001-008 and reference data; preserve its registrations.
 2. Use a dedicated runtime login that inherits the restricted `slaa_app` role. Keep the owner connection outside the Vercel runtime. The app disables prepared statements for transaction pooling and defaults to three connections per function instance.
 3. Configure production environment variables from `.env.example`. Use real Cloudflare Turnstile keys, a strong `SESSION_SECRET`, and `NEXT_PUBLIC_SITE_URL=https://slaa-datacollection-gold.vercel.app`. Allow the production hostname in the Turnstile widget. Do not upload `.env.local` or configure `DEV_ADMIN_EMAIL`.
 4. Link the Vercel project and GitHub repository, then deploy:
@@ -76,3 +76,5 @@ The event limits allow 600 identity checks, 600 registration submissions and 6,0
 See [the launch runbook](docs/launch-runbook.md) for the health endpoint, hourly monitoring, encrypted backups and restore rehearsal, submission recovery, incident steps and remaining account-owner checks.
 
 The runtime dependency audit is kept separate from development tooling. `shadcn` and Neon configuration tools are build/development dependencies. Next.js's PostCSS dependency is overridden to a patched compatible 8.x release. Development tooling still depends on `braces`, for which npm currently provides no patched release; avoid processing untrusted generator patterns.
+
+University verification teams use the role-based [Verification & calls workflow](docs/admin-guide.md#university-verifiers-and-access-roles). Student verifiers can call and finally approve only assigned applicants; supervisors manage assignments and follow-ups. Only the owner manages staff roles.

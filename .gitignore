@@ -45,6 +45,7 @@ next-env.d.ts
 /playwright-report/
 import_errors.csv
 import_warnings.csv
+tests/e2e/.staff-state.json
 .neon
 
 .vercel

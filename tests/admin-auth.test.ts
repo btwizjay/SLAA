@@ -112,7 +112,7 @@ describe("local staff authentication", () => {
     const [created] =
       await admin`SELECT role,must_change_password,password_hash FROM admin_staff WHERE email='newstaff@example.com'`;
     expect(created).toMatchObject({
-      role: "admin",
+      role: "verifier",
       must_change_password: true,
     });
     expect(created.password_hash).not.toContain(initial);

@@ -7,8 +7,9 @@ the existing Neon database. It has no Supabase or email-provider dependency.
 
 ## Initial setup and recovery
 
-Apply migration `db/007_admin_suite.sql` once to an existing database, inside
-a transaction using its owner connection. Do not rerun migrations 001–006
+For an existing database with migration 007, apply `db/008_verification_roles.sql`
+inside a transaction using its owner connection. An older database needs 007
+first. Do not rerun migrations 001–006
 against an already migrated live register. For a new development or test
 database, `scripts/db-apply.sh` applies all migrations and reference data.
 
@@ -47,6 +48,10 @@ password. This recovery operation needs the database owner credentials.
 
 ## Feature suite
 
+- **Verification & calls:** assigned applicants, masked identities, direct
+  phone links, call outcomes and notes, scheduled callbacks, overdue filters,
+  staff workload and audited final approvals. See the role workflow below.
+
 - **Overview:** live totals, seven-day registrations, district coverage,
   recent applicants, and links to outstanding review queues.
 - **Members:** search by name, SLAA ID, NIC or Postal ID; filter by role,
@@ -82,10 +87,65 @@ password. This recovery operation needs the database owner credentials.
 - **Exports:** members, athletes, coaches, events/PBs, relationships and
   unlisted requests, with CSV formula protection and an audit of each export.
 - **Audit log:** append-only history with action, actor and member filters.
-- **Staff:** owner-only account creation, activation/disablement, temporary
+- **Staff:** owner-only account creation, role changes, activation/disablement, temporary
   password reset and session revocation. New/reset accounts must change
   their password before they can access data. Staff cannot manage the owner.
 - **Your account:** change your password or sign out other sessions.
+
+## University verifiers and access roles
+
+| Role | Access |
+| --- | --- |
+| Owner | Full register, verification, exports and staff account/role management |
+| Administrator | Full register, verification and exports; no staff management |
+| Verification supervisor | All eligible athlete verification cases, assignments, workload, call records, final approval and reopening/closure |
+| Student verifier | Only assigned athlete cases, call records, callbacks and final approval |
+
+The owner creates individual accounts in **Staff**, choosing **Student verifier**
+and recording the person's name and organization, e.g. Sabaragamuwa University.
+New accounts default to this restricted role and require a password change.
+Create supervisor accounts for team leads. No shared student login is needed.
+Role changes revoke the affected account's sessions immediately.
+
+In **Verification & calls**, a supervisor can assign the next 1–100 unassigned
+applicants to a caller, optionally by district. New registrations appear in
+the unassigned queue automatically. Individual cases can be reassigned with
+a reason. Concurrent batch assignments select different applicants. The
+previous assignee loses access as soon as a case is reassigned.
+
+The caller opens an assigned case and calls the recorded phone number. For
+applicants under 18, use the recorded guardian's number. Record every attempt
+with its outcome and notes. A callback requires a future time in Sri Lanka
+time. Wrong numbers, mismatches and declined verification enter the supervisor
+review queue. These actions do not silently correct or delete applicant data.
+
+Student verifiers **can give final approval**, as requested by the owner.
+Choose **Information confirmed**, identify the person spoken to, complete all
+four checks, and explicitly select final approval. Approval updates the member
+to verified and records the caller and time. A minor requires a recorded
+guardian and a guardian conversation. Every save checks the current assignment
+and case version to reject stale or repeated submissions.
+
+Supervisors can reopen a verified case with a reason; this returns the member
+to pending while preserving call history. They can close other cases without
+approval without deleting the registration. Correcting an approved profile
+also returns it to review. Closed cases must be reopened before more calls or
+reassignment. Any profile correction invalidates already open verification
+forms so callers cannot approve information that changed during their call.
+The most recent 50 call records are displayed; older records
+remain in the database.
+
+Student verifiers and supervisors cannot open the full member register,
+download CSV exports, import coaches, merge/delete/suspend members or manage
+staff accounts. These restrictions are enforced in server actions and data
+queries as well as navigation. Call notes are visible only within authorized
+cases; audit entries record outcomes and actors without copying the notes.
+Verification records follow member deletion through database cascades. Merged
+records retain their original case history and are excluded from active queues.
+
+The development shortcut applies only when no staff cookie exists. A real
+staff session retains its own role even in development. Production never
+enables the shortcut.
 
 For CSV imports, use the downloadable template. `nic` supplies date of birth
 and gender; Postal ID rows must supply both explicitly. Separate coaching

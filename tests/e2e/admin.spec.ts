@@ -10,6 +10,7 @@ test("staff review pages work with the current database schema", async ({
     ["/admin/coach-requests", "Coach requests"],
     ["/admin/confirmations", "Coach confirmations"],
     ["/admin/overview", "Register overview"],
+    ["/admin/verification", "Verification & calls"],
     ["/admin/coaches", "Add and import coaches"],
     ["/admin/audit", "Audit log"],
     ["/admin/exports", "Exports"],
@@ -55,15 +56,13 @@ test("staff can preview and import a coach CSV, then export the filtered result"
   const importer = page
     .getByRole("heading", { name: "Import coach CSV" })
     .locator("..");
-  await importer
-    .getByLabel("Coach CSV file")
-    .setInputFiles({
-      name: "coaches.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(
-        "full_name,nic,district,events\nBrowser CSV Coach,196512300987,Kandy,100m;200m\n",
-      ),
-    });
+  await importer.getByLabel("Coach CSV file").setInputFiles({
+    name: "coaches.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "full_name,nic,district,events\nBrowser CSV Coach,196512300987,Kandy,100m;200m\n",
+    ),
+  });
   await importer.getByRole("button", { name: "Preview CSV" }).click();
   await expect(
     importer.getByRole("cell", { name: "Browser CSV Coach", exact: true }),

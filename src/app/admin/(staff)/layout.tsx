@@ -3,10 +3,12 @@ import { PageContainer } from "@/components/Page";
 import { requireAdminSession } from "@/lib/admin-auth";
 import { signOut } from "../auth-actions";
 import { LangProvider } from "@/components/LangProvider";
+import { hasPermission, ROLE_LABELS } from "@/lib/staff-permissions";
 
 export const dynamic = "force-dynamic";
 
 const NAV = [
+  ["/admin/verification", "Verification & calls"],
   ["/admin/overview", "Overview"],
   ["/admin", "Members"],
   ["/admin/duplicates", "Possible duplicates"],
@@ -29,9 +31,14 @@ export default async function StaffLayout({
     <PageContainer size="wide" className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 border-b pb-3 md:flex-row md:items-center md:justify-between">
         {/* scrolls sideways on phones instead of wrapping into several lines */}
-        <nav className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 text-sm md:mx-0 md:px-0 md:pb-0">
+        <nav className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 text-sm md:mx-0 md:min-w-0 md:flex-1 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
           {NAV.filter(
-            ([href]) => href !== "/admin/staff" || session.role === "owner",
+            ([href]) =>
+              href === "/admin/account" ||
+              href === "/admin/verification" ||
+              (href === "/admin/staff"
+                ? hasPermission(session.role, "manage_staff")
+                : hasPermission(session.role, "manage_register")),
           ).map(([href, label]) => (
             <Link
               key={href}
@@ -46,7 +53,10 @@ export default async function StaffLayout({
           action={signOut}
           className="flex items-center gap-2 text-xs text-muted-foreground"
         >
-          <span className="truncate">{session.email}</span>
+          <span className="truncate">
+            {session.email}
+            <span className="block">{ROLE_LABELS[session.role]}</span>
+          </span>
           <button type="submit" className="shrink-0 underline">
             Sign out
           </button>

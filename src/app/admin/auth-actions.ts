@@ -19,6 +19,7 @@ import {
   verifyPassword,
 } from "@/lib/admin-session";
 import type { ActionState } from "@/lib/admin-ui";
+import { staffHome } from "@/lib/staff-permissions";
 
 const passwordSchema = z
   .string()
@@ -62,7 +63,7 @@ export async function loginAction(
     if (!limit.ok)
       return { error: "Too many sign-in attempts. Please wait 15 minutes." };
     const [staff] =
-      await sql`SELECT id, password_hash, active, must_change_password FROM admin_staff WHERE email = ${email}`;
+      await sql`SELECT id, password_hash, active, must_change_password, role FROM admin_staff WHERE email = ${email}`;
     const valid = await verifyPassword(
       password,
       staff?.password_hash ?? dummyHash,
@@ -80,6 +81,7 @@ export async function loginAction(
       await tx`INSERT INTO audit_log(actor, action) VALUES (${email}, 'admin_login')`;
     });
     await setSession(staff.id, sessionId);
+    destination = staffHome(staff.role);
     if (staff.must_change_password) destination = "/admin/account";
   } catch {
     return { error: "Sign-in is temporarily unavailable. Please try again." };
@@ -133,7 +135,7 @@ export async function changePassword(
   });
   await setSession(session.id, nextId);
   revalidatePath("/admin", "layout");
-  redirect("/admin/overview?passwordChanged=1");
+  redirect(staffHome(session.role) + "?passwordChanged=1");
 }
 export async function createStaff(
   _state: ActionState,
@@ -141,19 +143,28 @@ export async function createStaff(
 ): Promise<ActionState> {
   const owner = await requireOwner();
   const parsed = z
-    .object({ email: z.email().max(254), password: passwordSchema })
+    .object({
+      email: z.email().max(254),
+      password: passwordSchema,
+      role: z.enum(["admin", "supervisor", "verifier"]).default("verifier"),
+      displayName: z.string().trim().max(120),
+      organization: z.string().trim().max(120),
+    })
     .safeParse({
       email: String(data.get("email") ?? "")
         .trim()
         .toLowerCase(),
       password: data.get("password"),
+      role: data.get("role") ?? undefined,
+      displayName: String(data.get("displayName") ?? ""),
+      organization: String(data.get("organization") ?? ""),
     });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const hash = await hashPassword(parsed.data.password);
   try {
     await sql.begin(async (tx) => {
-      await tx`INSERT INTO admin_staff(email, password_hash) VALUES (${parsed.data.email}, ${hash})`;
-      await tx`INSERT INTO audit_log(actor, action, details) VALUES (${owner.email}, 'staff_created', ${tx.json({ email: parsed.data.email })})`;
+      await tx`INSERT INTO admin_staff(email, password_hash,role,display_name,organization) VALUES (${parsed.data.email}, ${hash},${parsed.data.role},${parsed.data.displayName || null},${parsed.data.organization || null})`;
+      await tx`INSERT INTO audit_log(actor, action, details) VALUES (${owner.email}, 'staff_created', ${tx.json({ email: parsed.data.email, role: parsed.data.role })})`;
     });
   } catch (e) {
     return {
@@ -189,7 +200,7 @@ export async function manageStaff(
   const operation = String(data.get("operation") ?? "");
   if (
     !z.uuid().safeParse(id).success ||
-    !["disable", "enable", "revoke", "reset"].includes(operation)
+    !["disable", "enable", "revoke", "reset", "role"].includes(operation)
   )
     return { error: "Choose a valid staff action." };
   const temporary =
@@ -199,6 +210,11 @@ export async function manageStaff(
   if (temporary && !temporary.success)
     return { error: temporary.error.issues[0].message };
   const hash = temporary?.success ? await hashPassword(temporary.data) : null;
+  const role =
+    operation === "role"
+      ? z.enum(["admin", "supervisor", "verifier"]).safeParse(data.get("role"))
+      : null;
+  if (role && !role.success) return { error: "Choose a valid staff role." };
   await sql.begin(async (tx) => {
     const [staff] =
       await tx`SELECT email, role FROM admin_staff WHERE id = ${id} FOR UPDATE`;
@@ -210,9 +226,11 @@ export async function manageStaff(
       await tx`UPDATE admin_staff SET active = ${operation === "enable"} WHERE id = ${id}`;
     if (hash)
       await tx`UPDATE admin_staff SET password_hash = ${hash}, must_change_password = true WHERE id = ${id}`;
+    if (role?.success)
+      await tx`UPDATE admin_staff SET role=${role.data} WHERE id=${id}`;
     if (operation !== "enable")
       await tx`UPDATE admin_session SET revoked_at = now() WHERE staff_id = ${id} AND revoked_at IS NULL`;
-    await tx`INSERT INTO audit_log(actor, action, details) VALUES (${owner.email}, ${"staff_" + operation}, ${tx.json({ email: staff.email })})`;
+    await tx`INSERT INTO audit_log(actor, action, details) VALUES (${owner.email}, ${"staff_" + operation}, ${tx.json({ email: staff.email, ...(role?.success ? { old_role: staff.role, new_role: role.data } : {}) })})`;
   });
   revalidatePath("/admin/staff");
   return { success: "Staff account updated." };

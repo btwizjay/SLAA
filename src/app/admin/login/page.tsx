@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/admin-auth";
 import { ActionForm } from "@/components/admin/ActionForm";
 import { loginAction } from "../auth-actions";
+import { staffHome } from "@/lib/staff-permissions";
 export const metadata = { title: "Staff sign in · SLAA" };
 export default async function LoginPage() {
   const session = await getAdminSession();
   if (session)
     redirect(
-      session.must_change_password ? "/admin/account" : "/admin/overview",
+      session.must_change_password ? "/admin/account" : staffHome(session.role),
     );
   return (
     <div className="mx-auto w-full max-w-md px-4 py-12">

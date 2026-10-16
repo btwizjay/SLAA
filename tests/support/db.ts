@@ -24,7 +24,7 @@ export const admin = postgres(adminUrl, {
 
 export async function resetDb() {
   await admin`
-    TRUNCATE admin_session, admin_staff, guardian, athlete_coach, coach_request, athlete, coach, member, audit_log, rate_limit
+    TRUNCATE verification_contact, member_verification, admin_session, admin_staff, guardian, athlete_coach, coach_request, athlete, coach, member, audit_log, rate_limit
     RESTART IDENTITY CASCADE`;
   await admin`SELECT setval('coach_id_seq', 1, false), setval('athlete_id_seq', 1, false)`;
 }

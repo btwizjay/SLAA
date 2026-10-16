@@ -28,6 +28,7 @@ export async function verifyMember(formData: FormData) {
     await tx`
       UPDATE coach SET is_verified = true, verified_by = ${admin}, verified_at = now()
       WHERE slaa_id = ${slaaId}`;
+    await tx`UPDATE member_verification SET status='approved',verified_by=${admin},verified_at=now(),follow_up_at=NULL,version=version+1,updated_at=now() WHERE slaa_id=${slaaId}`;
     await tx`INSERT INTO audit_log (actor, action, slaa_id) VALUES (${admin}, 'verify', ${slaaId})`;
   });
   revalidatePath(`/admin/members/${slaaId}`);
